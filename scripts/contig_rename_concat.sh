@@ -1,10 +1,5 @@
 #!/bin/bash -e
 
-# Script is not more needed, because we decided not to keep the temp concatenated file, rather concatenate it just before metaeuk creation and then delete it.
-#Another script does just awk renaming of contigs of a single given sample
-
-
-
 # This script wisely concatenates EukRep contigs of all samples into one file
 
 # Problem is that all contigs have names like k141_134158 and there could be contigs with identical names in diferent files. With simple concatenation that would produce a faulty fasta file. To overcome this, I add SRR identifier to each contig identifier before concatenation
@@ -26,3 +21,4 @@ done;
 
 cat "${@/%/_renamed}" > "$output"
 echo "${@/%/_renamed}"
+rm "${@/%/_renamed}" #remove tmp files

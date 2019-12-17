@@ -46,10 +46,11 @@ rule all:
         #expand("{sample}/reads_1_trim_fastqc.html", sample=config["SAMPLE"]),
         #expand("{sample}/reads_2_trim_fastqc.html", sample=config["SAMPLE"]),
      # unfiltered pathway
-        #"megahit_unfiltered/final.contigs.fa",      # --min-contig-len 5000
-        #expand("{sample}/EukRep_contigs_from_unfiltered.fasta", sample=config["SAMPLE"]),   # -m lenient
-        expand("{setn}/{sample}/quast_{sample}", sample=config["SAMPLE"], setn=setn),
-        setn+"/quast_multi", # multisample quast for EukRep contigs from all samples. Easy to compare
+        "megahit_unfiltered/final.contigs.fa",      # --min-contig-len 500
+        expand("{sample}/EukRep_contigs_from_unfiltered.fasta", sample=config["SAMPLE"]),   # -m lenient
+        #expand("{setn}/{sample}/quast_{sample}", sample=config["SAMPLE"], setn=setn),
+        setn+"/quast_multi_raw",
+        setn+"/quast_multi_EukRep", # multisample quast for EukRep contigs from all samples. Easy to compare
         setn+"/EukRep_contigs_renamed_cat.fasta",
         setn+"/MetaEuk_preds.fasta",
 
@@ -121,13 +122,11 @@ rule megahit_unfiltered:
         setn+"/{sample}/time_megahit_unfiltered.tsv"
     conda:
         mainfolder + "/yaml/megahit.yaml"
-    threads: 7 #int( snakemake.utils.available_cpu_count() * 0.5 )
+    threads: int( snakemake.utils.available_cpu_count() * 0.5 )
 #this will allow two megahits run in parallell and make sure all cores are 100% busy al the time, because with single megahit on all cores they are ~75% occupied on average.
     shell:
         "rm -r "+setn+"/{wildcards.sample}/megahit_unfiltered; "
-	"{{ time megahit -t {threads}" #+str( snakemake.utils.available_cpu_count() )+
-        " -1 {input[0]} -2 {input[1]} -o '"+setn+"/{wildcards.sample}/megahit_unfiltered'"
-        " --min-contig-len " + str(mincontiglen) + "; }} 2> {output[1]}; "
+	"{{ time megahit -t " +str( snakemake.utils.available_cpu_count() )+" -1 {input[0]} -2 {input[1]} -o '"+setn+"/{wildcards.sample}/megahit_unfiltered' --min-contig-len 500; }} 2> {output[1]}; "
         "touch {setn}/{wildcards.sample}/checkpoint_{wildcards.sample}_is_done.txt" 
 
 rule EukRep_unfiltered:
@@ -148,18 +147,32 @@ rule QUAST:
         directory(setn+"/{sample}/quast_{sample}")
     conda:
         mainfolder + "/yaml/quast.yaml"
-    threads: 5
+    threads: 4
     shell:
         "quast -t {threads} --min-contig "+str(mincontiglen)+" --silent -o {output} {input}"
 
-rule QUAST_multisample:
+
+rule QUAST_multisample_raw_contigs:
+    input:
+        expand("{setn}/{sample}/megahit_unfiltered/final.contigs.fa", sample=config["SAMPLE"],setn=setn)
+    output:
+        directory(setn+"/quast_multi_raw")
+    conda:
+        mainfolder + "/yaml/quast.yaml"
+    threads: 4
+    shell:
+        #"time quast -t {threads} --silent -o {output} {input}"
+        "time quast -t {threads} --min-contig "+str(mincontiglen)+" --silent -o {output} {input}"
+
+
+rule QUAST_multisample_Eukrep:
     input:
         expand("{setn}/{sample}/EukRep_contigs_from_unfiltered.fasta", sample=config["SAMPLE"],setn=setn)
     output:
-        directory(setn+"/quast_multi")
+        directory(setn+"/quast_multi_EukRep")
     conda:
         mainfolder + "/yaml/quast.yaml"
-    threads: 5
+    threads: 4
     shell: 
         #"time quast -t {threads} --silent -o {output} {input}"
         "time quast -t {threads} --min-contig "+str(mincontiglen)+" --silent -o {output} {input}"
@@ -171,17 +184,7 @@ rule contig_concatenating:
     output:
         setn+"/EukRep_contigs_renamed_cat.fasta"
     shell:
-        mainfolder + "/scripts/contig_concatenating.sh {output} {input}" 
-
-
-rule renaming_contigs:
-    input:
-        "{sample}/EukRep_contigs_from_unfiltered.fasta"
-    output:
-        "{sample}/EukRep_contigs_from_unfiltered_renamed.fasta"
-    shell: 
-        mainfolder + "/scripts/contig_renaming.sh {input} {output}" 
-
+        mainfolder + "/scripts/contig_rename_concat.sh {output} {input}" 
 
 # MetaEuk 
 rule MetaEuk_createdb:
@@ -203,8 +206,8 @@ rule MetaEuk_predictexons:
         setn+"/TIME_MetaEuk.txt", #{output[1]}
         directory(setn+"/tempFolder") #{output[2]}
     benchmark:
-        setn+"/time_MetaEuk_predictexons.tsv"
-    threads: 56
+        setn+"time_MetaEuk_predictexons.tsv"
+    threads: 64
     resources: mem_mb=110000
     shell:
         "mkdir -p {output[0]}; "
@@ -219,7 +222,7 @@ rule MetaEuk_reduceredundancy:
         setn+"/MetaEuk_calls"
     output:
         directory(setn+"/MetaEuk_preds")
-    threads: 56
+    threads: 64
     shell:
         "mkdir {output}; "
         "metaeuk reduceredundancy {input}/MetaEuk_calls"
@@ -231,7 +234,7 @@ rule MetaEuk_unitesetnstofasta:
         setn+"/MetaEuk_preds"
     output:
         directory(setn+"/MetaEuk_preds.fasta")
-    threads: 56
+    threads: 64
     shell:    
         "mkdir {output}; "
         "metaeuk unitesetstofasta {input[0]}/contigs "+EUK_PROFILES+
