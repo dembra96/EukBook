@@ -1,0 +1,247 @@
+snakefolder='/home/ubuntu/EukBook'
+
+
+
+rule all:
+    input:  
+        #"megahit_filtered/final.contigs.fa",
+        #"eukaryotes.fasta",
+        #"kraken_db_prot_euk_k15_l12_output",
+        #"Euk_reads.txt",
+        #"reads_1_euk.fastq.gz",
+        #"reads_2_euk.fastq.gz",
+        "EukRep_contigs_from_filtered.fasta",
+        "EukRep_contigs_from_unfiltered.fasta",
+        "bowtie2_unfiltered.sam",
+        "Euk_contig_IDs_unfiltered.txt",
+        "mapped_reads_bowtie2_unfiltered.sam.txt",
+        
+        #"megahit_unfiltered_nocutoff/final.contigs.fa",
+        #"bowtie2_unfiltered_nocutoff.sam",
+
+        "mapped_reads_percentages_table.tsv"
+
+
+
+### Preprocessing
+rule copy_fastq:
+    output:
+        "reads_1.fastq.gz",
+        "reads_2.fastq.gz"
+    shell:
+       snakefolder + "/scripts/download_fastq.sh {config[SAMPLE]} {output}"
+
+rule FastQC_untrimmed:
+    input:
+        "reads_1.fastq.gz",
+        "reads_2.fastq.gz"
+    output:
+        "reads_1_fastqc.html",
+        "reads_2_fastqc.html"
+    conda:
+        "conda_packages.yaml"
+    shell:
+        "fastqc -t 2 {input} "
+
+rule fastp_trimming:
+    input:
+        "reads_1.fastq.gz",
+        "reads_2.fastq.gz"
+    output:
+        "reads_1_trim.fastq.gz",
+        "reads_2_trim.fastq.gz"
+    threads:
+        4
+    conda:
+        "conda_packages.yaml"
+    shell:
+        "fastp -r -w {threads} -i {input[0]} -I {input[1]} -o {output[0]} -O {output[1]}"
+
+rule FastQC_trimmed:
+    input:
+        "reads_1_trim.fastq.gz",
+        "reads_2_trim.fastq.gz"
+    output:
+        "reads_1_trim_fastqc.html",
+        "reads_2_trim_fastqc.html"
+        #output is the input without extentiuon plus "_fastqc.html". And "_fastqc.zip".
+    conda:
+        "conda_packages.yaml"
+    shell:
+        "fastqc -t 2 {input} "
+
+
+
+rule kraken2:
+    input:
+        "/mnt/kraken/my_kraken_db_nt",
+        "reads_1_trim.fastq.gz",
+        "reads_2_trim.fastq.gz"
+    output:
+        "kraken_db_nt_k15_l12_report",
+        "kraken_db_nt_k15_l12_output"
+    threads: 28
+    conda:
+        "kraken2.yaml"
+    shell:
+        "kraken2 --db {input[0]} --threads 28 --paired "
+        "--report {output[0]} --output {output[1]} {input[1]} {input[2]}"
+
+
+
+
+### Assembly without filtering
+rule megahit_unfiltered:
+    input:
+       "reads_1_trim.fastq.gz",
+       "reads_2_trim.fastq.gz"
+    output:
+       "megahit_unfiltered/final.contigs.fa"
+    conda:
+        "megahit.yaml"
+    shell:
+        "rm -r megahit_unfiltered; "
+        "megahit -1 {input[0]} -2 {input[1]} -o 'megahit_unfiltered' #--min-contig-len 5000 "
+
+
+
+
+rule EukRep_unfiltered:
+    input:
+        "megahit_unfiltered/final.contigs.fa"
+    output:
+        "EukRep_contigs_from_unfiltered.fasta"
+    shell:
+        "EukRep -i {input} -o {output} -m lenient --min 1"
+
+
+rule python_euk_filtering:
+    input:
+        "kraken_db_nt_k15_l12_output",
+        snakefolder + "/ArchBactVir_TaxIDs.txt"
+    output:
+        "Euk_reads.txt"
+    conda:
+        "python.yaml"
+    shell:
+        "python {snakefolder}/scripts/python_euk_filtering.py {input[0]}"
+
+
+rule seqtk_euk_subsetting_1:
+    input:
+        "reads_1_trim.fastq.gz",
+        "Euk_reads.txt"
+    output:
+        "reads_1_euk.fastq.gz"
+    conda:
+        "seqtk.yaml"
+    shell:
+        "seqtk subseq {input} > reads_1_euk.fastq; "
+        "gzip reads_1_euk.fastq"
+
+
+rule seqtk_euk_subsetting_2:
+     input:
+         "reads_2_trim.fastq.gz",
+         "Euk_reads.txt"
+     output:
+         "reads_2_euk.fastq.gz"
+     conda:
+         "seqtk.yaml"
+     shell:
+         "seqtk subseq {input} > reads_2_euk.fastq; "
+         "gzip reads_2_euk.fastq"
+
+
+
+
+
+
+### Assembly with filtering
+rule megahit_filtered:
+    input:
+       "reads_1_euk.fastq.gz",
+       "reads_2_euk.fastq.gz"
+    output:
+       "megahit_filtered/final.contigs.fa"
+    conda:
+        "megahit.yaml"
+    shell:
+        "rm -r megahit_filtered; "
+        "megahit -1 {input[0]} -2 {input[1]} -o 'megahit_filtered' #--min-contig-len 5000"
+
+
+rule EukRep_filtered:
+    input:
+        "megahit_filtered/final.contigs.fa"
+    output:
+        "EukRep_contigs_from_filtered.fasta"
+    shell:
+        "EukRep -i {input} -o {output} -m lenient --min 1"
+
+
+
+### Mapping reads back to UNfiltered contigs
+
+rule bowtie2_index_unfiltered:
+    input:
+        "megahit_unfiltered/final.contigs.fa"
+    output:
+        "megahit_unfiltered/final.contigs.fa.1.bt2l"
+    conda:
+        "bowtie2.yaml"
+    shell:
+        "bowtie2-build -q --large-index --threads 28 {input} megahit_unfiltered/final.contigs.fa"
+        
+
+rule bowtie2_map_unfiltered:
+    input:
+        "megahit_unfiltered/final.contigs.fa.1.bt2l",
+        "reads_1_trim.fastq.gz",
+        "reads_2_trim.fastq.gz"
+    output:
+        "bowtie2_unfiltered.sam"
+    conda:
+        "bowtie2.yaml"
+    shell:
+        "bowtie2 --local --omit-sec-seq -t --threads 28 "
+        "-x megahit_unfiltered/final.contigs.fa -1 {input[1]} -2 {input[2]} -S {output} 2>bowtie2_local_unfiltered.log"
+
+
+
+
+
+### Checking which of reads mapped to euk contigs are actually non-Euks by Kraken opinion
+rule get_Euk_contig_names_unfiltered:
+    input:
+        "EukRep_contigs_from_unfiltered.fasta"
+    output:
+        "Euk_contig_IDs_unfiltered.txt"
+    shell:
+        'grep -Eo "^>[^ ]+" {input} | cut -c 2- > {output}'
+
+rule get_mapped_read_ids_bowtie2_unfiltered:
+    input:
+        "bowtie2_unfiltered.sam",
+        "Euk_contig_IDs_unfiltered.txt"
+    output:
+        "mapped_reads_bowtie2_unfiltered.sam.txt"
+    conda:
+        "python.yaml"
+    shell:
+        "python {snakefolder}/scripts/python_get_mapped_reads_to_contigs.py {input}"
+
+rule calculate_mapped_read_percentages:
+    input:
+        #has to be in this particular order for python script
+        "bowtie2_unfiltered.sam",
+        "Euk_contig_IDs_unfiltered.txt",
+        "Euk_reads.txt"
+    output:
+        "mapped_reads_percentages_table.tsv"
+    conda:
+        "python.yaml"
+    shell:
+        "python {snakefolder}/scripts/python_calculate_mapped_read_percentages.py {input}"
+
+ 

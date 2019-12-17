@@ -1,0 +1,7 @@
+#Small samples for pipeline benchmarking
+
+SAMPLESET:
+    - set_temp
+SAMPLE:
+    - SRR2844600 #1.3G soil metagenome, 39% Bac, 0.15% Euk
+    - SRR2107171 #2.0G sludge metagenome, 16% Bac, 0.04% Euk

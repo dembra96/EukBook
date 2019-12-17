@@ -1,0 +1,189 @@
+# This is the pipeline to run MetaEuk from beginning (given sample accession) without any kraken filtering and bowtie mapping
+
+## Required config parameters:
+# SAMPLE - passed with config file by --configfile samples.yaml or --config SAMPLE=SRR2844600
+
+## Benchmarking mode?
+#benchmark=True
+benchmark=False
+
+if (benchmark==False):
+    downloading_script="download_fastq.sh"
+    mincontiglen=5000
+else:
+    downloading_script="download_fastq_short.sh" # subsets only first 100k reads
+    mincontiglen=500 #otherwise no contigs left, too few reads for 5000kb+ contigs
+
+
+
+# hardcoded parameters:
+mainfolder='/home/ubuntu/EukBook'
+
+
+rule all:
+    input:
+     # the samples themselves
+        #expand("{sample}/reads_1.fastq.gz", sample=config["SAMPLE"]),
+        #expand("{sample}/"reads_2.fastq.gz", sample=config["SAMPLE"]),
+        #expand("{sample}/"reads_1_trim.fastq.gz", sample=config["SAMPLE"]),
+        #expand("{sample}/"reads_2_trim.fastq.gz", sample=config["SAMPLE"]),
+     # can be ommited in benchmarking   
+        #expand("{sample}/reads_1_fastqc.html", sample=config["SAMPLE"]),
+        #expand("{sample}/reads_2_fastqc.html", sample=config["SAMPLE"]), 
+        #expand("{sample}/reads_1_trim_fastqc.html", sample=config["SAMPLE"]),
+        #expand("{sample}/reads_2_trim_fastqc.html", sample=config["SAMPLE"]),
+     # unfiltered pathway
+        #"megahit_unfiltered/final.contigs.fa",      # --min-contig-len 5000
+        #expand("{sample}/EukRep_contigs_from_unfiltered.fasta", sample=config["SAMPLE"]),   # -m lenient
+        expand("{sample}/quast_{sample}", sample=config["SAMPLE"]),
+        expand("{sample}/MetaEuk_preds.fasta", sample=config["SAMPLE"]),
+
+
+### Preprocessing
+rule download_fastq:
+    output: 
+        "{sample}/reads_1.fastq.gz",
+        "{sample}/reads_2.fastq.gz"
+    shell: 
+        "{mainfolder}/scripts/" + downloading_script + " {wildcards.sample} {output}" 
+
+
+rule FastQC_untrimmed:
+    input:
+        "{sample}/reads_1.fastq.gz",
+        "{sample}/reads_2.fastq.gz"
+    output:
+        "{sample}/reads_1_fastqc.html",
+        "{sample}/reads_2_fastqc.html"
+    conda:
+        mainfolder + "/yaml/conda_packages.yaml"
+    threads: 2
+    shell: 
+        "fastqc -t {threads} {input} "
+
+        
+rule fastp_trimming:
+    input: 
+        "{sample}/reads_1.fastq.gz",
+        "{sample}/reads_2.fastq.gz"
+    output: 
+        "{sample}/reads_1_trim.fastq.gz",
+        "{sample}/reads_2_trim.fastq.gz" 
+    threads: 4  
+    conda:
+        mainfolder + "/yaml/conda_packages.yaml"
+    shell: 
+        "fastp -r -w {threads} -i {input[0]} -I {input[1]} -o {output[0]} -O {output[1]} -j {wildcards.sample}/fastp.json -h {wildcards.sample}/fastp.html"
+
+
+rule FastQC_trimmed:
+    input:
+        "{sample}/reads_1_trim.fastq.gz",
+        "{sample}/reads_2_trim.fastq.gz"
+    output:
+        "{sample}/reads_1_trim_fastqc.html",
+        "{sample}/reads_2_trim_fastqc.html"
+        #output is the input without extentiuon plus "_fastqc.html". And "_fastqc.zip".
+    conda:
+        mainfolder + "/yaml/conda_packages.yaml"
+    threads: 2
+    shell:
+        "fastqc -t {threads} {input} "
+
+
+
+
+### Assembly without filtering
+rule megahit_unfiltered:
+    input:
+        "{sample}/reads_1_trim.fastq.gz",
+        "{sample}/reads_2_trim.fastq.gz"
+    output:
+        "{sample}/megahit_unfiltered/final.contigs.fa"
+    benchmark:
+        "{sample}/time_megahit_unfiltered.tsv"
+    conda:
+        mainfolder + "/yaml/megahit.yaml"
+    shell:
+        "rm -r {wildcards.sample}/megahit_unfiltered; "
+	"time megahit -1 {input[0]} -2 {input[1]} -o '{wildcards.sample}/megahit_unfiltered' --min-contig-len " + str(mincontiglen)
+
+rule EukRep_unfiltered:
+    input:
+        "{sample}/megahit_unfiltered/final.contigs.fa"
+    output:
+        "{sample}/EukRep_contigs_from_unfiltered.fasta"
+    shell:
+        "EukRep -i {input} -o {output} -m lenient --min 1"
+
+
+rule QUAST:
+    input:
+        "{sample}/megahit_unfiltered/final.contigs.fa",
+        "{sample}/EukRep_contigs_from_unfiltered.fasta",
+    output:
+        directory("{sample}/quast_{sample}")
+    conda:
+        mainfolder + "/yaml/quast.yaml"
+    threads: 5
+    shell:
+        "quast -t {threads} --silent -o {output} {input}"
+
+
+
+
+# MetaEuk 
+EUK_PROFILES="/mnt/metaeuk_profiles/MMETSP_uniclust50_MERC_profiles_more_than1"
+
+
+rule MetaEuk_createdb:
+    input:
+        "{sample}/EukRep_contigs_from_unfiltered.fasta"
+    output:
+        directory("{sample}/contigs_db")
+    threads: 56
+    shell:
+        "mkdir {output}; "
+        "metaeuk createdb {input} {output}/contigs --dbtype 2"
+
+
+rule MetaEuk_predictexons:
+    input:
+        "{sample}/contigs_db"
+    output:
+        directory("{sample}/MetaEuk_calls")
+    benchmark:
+        "{sample}/time_MetaEuk_predictexons.tsv"
+    threads: 56
+    resources: mem_mb=110000
+    shell:
+        "mkdir {output}; "
+        "{{ time metaeuk predictexons {input}/contigs {EUK_PROFILES}" 
+        " {output}/MetaEuk_calls {wildcards.sample}/tempFolder"
+        " --metaeuk-eval 0.0001 -e 100 --slice-search --min-ungapped-score 35"
+        " --min-length 40 --min-exon-aa 20 --metaeuk-tcov 0.6; }} 2> {wildcards.sample}/metaeuk_time.txt"
+        
+
+rule MetaEuk_reduceredundancy:
+    input:
+        "{sample}/MetaEuk_calls"
+    output:
+        directory("{sample}/MetaEuk_preds")
+    threads: 56
+    shell:
+        "mkdir {output}; "
+        "metaeuk reduceredundancy {input}/MetaEuk_calls"
+        " {output}/MetaEuk_preds {output}/MetaEuk_preds_clust"
+
+rule MetaEuk_unitesetstofasta:
+    input:
+        "{sample}/contigs_db",
+        "{sample}/MetaEuk_preds"
+    output:
+        directory("{sample}/MetaEuk_preds.fasta")
+    threads: 56
+    shell:    
+        "mkdir {output}; "
+        "metaeuk unitesetstofasta {input[0]}/contigs {EUK_PROFILES}"
+        " {input[1]}/MetaEuk_preds {output}/MetaEuk_preds.fasta --protein 1"
+

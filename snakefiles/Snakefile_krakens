@@ -1,0 +1,435 @@
+#Comparing several krakens
+
+## Required config parameters:
+# SAMPLE
+
+# hardcoded parameters:
+mainfolder='/home/ubuntu/EukBook'
+
+
+rule all:
+    input:
+        # the samples themselves
+        #"reads_1.fastq.gz",
+        #"reads_2.fastq.gz",
+        #"reads_1_trim.fastq.gz",
+        #"reads_2_trim.fastq.gz",
+     # can be ommited in benchmarking   
+        #"reads_1_fastqc.html",
+        #"reads_2_fastqc.html",      
+        #"reads_1_trim_fastqc.html",
+        #"reads_2_trim_fastqc.html",
+     # kraken classification
+        #"my_kraken_db_prot_euk_k15_l12_output",
+        #"my_kraken_db_nr_output",
+        #"my_kraken_db_nt_output",  #wildcard {config["krakendb"]} or {krakendb} don`t work anywhere except shell field
+        #"Euk_reads_from_kraken_nr.txt",
+     # filtered pathway
+        #"ieads_1_euk.fastq.gz",
+        #"reads_2_euk.fastq.gz",
+        #"megahit_filtered/final.contigs.fa",
+        #"megahit_filtered_full/final.contigs.fa",
+        #"megahit_filtered_nt/final.contigs.fa",
+        #"megahit_filtered_nr/final.contigs.fa",
+        #"EukRep_contigs_from_filtered.fasta",
+        ##"bowtie2_filtered.sam"
+     # unfiltered pathway
+        #"megahit_unfiltered/final.contigs.fa",      # --min-contig-len 5000
+        #"EukRep_contigs_from_unfiltered.fasta",    # -m lenient
+        #"bowtie2_unfiltered.sam",                  # --local --no-sec-seq
+        #"Euk_contig_IDs_unfiltered.txt",
+        "mapped_reads_percentages_three_krakens.tsv",
+	directory("quast")
+
+
+
+### Preprocessing
+rule download_fastq:
+    output: 
+        "reads_1.fastq.gz",
+        "reads_2.fastq.gz"
+    shell: 
+       "{mainfolder}/scripts/download_fastq.sh {config[SAMPLE]} {output}" 
+
+
+rule FastQC_untrimmed:
+    input:
+        "reads_1.fastq.gz",
+        "reads_2.fastq.gz"
+    output:
+        "reads_1_fastqc.html",
+        "reads_2_fastqc.html"
+    conda:
+        mainfolder + "/yaml/conda_packages.yaml"
+    shell: 
+        "fastqc -t 2 {input} "
+
+        
+rule fastp_trimming:
+    input: 
+        "reads_1.fastq.gz",
+        "reads_2.fastq.gz"
+    output: 
+        "reads_1_trim.fastq.gz",
+        "reads_2_trim.fastq.gz" 
+    threads: 4  
+    conda:
+        mainfolder + "/yaml/conda_packages.yaml"
+    shell: 
+        "fastp -r -w {threads} -i {input[0]} -I {input[1]} -o {output[0]} -O {output[1]}"
+
+
+rule FastQC_trimmed:
+    input:
+        "reads_1_trim.fastq.gz",
+        "reads_2_trim.fastq.gz"
+    output:
+        "reads_1_trim_fastqc.html",
+        "reads_2_trim_fastqc.html"
+        #output is the input without extentiuon plus "_fastqc.html". And "_fastqc.zip".
+    conda:
+        "{mainfolder}/yaml/conda_packages.yaml"
+    shell:
+        "fastqc -t 2 {input} "
+
+
+rule kraken2_full:
+    input:
+        "/mnt/kraken/my_kraken_db_prot_euk_k15_l12",
+        "reads_1_trim.fastq.gz",
+        "reads_2_trim.fastq.gz"
+    output:
+        "my_kraken_db_prot_euk_k15_l12_report",
+        "my_kraken_db_prot_euk_k15_l12_output"
+    threads: 10 
+    conda:
+        mainfolder+ "/yaml/kraken2.yaml"
+    shell:
+        "kraken2 --db {input[0]} --paired --threads {threads} "
+        "--report {output[0]} --output {output[1]} {input[1]} {input[2]}"
+
+rule kraken2_nr:
+    input:
+        "/mnt/kraken/my_kraken_db_nr",
+        "reads_1_trim.fastq.gz",
+        "reads_2_trim.fastq.gz"
+    output:
+        "my_kraken_db_nr_report",
+        "my_kraken_db_nr_output"
+    threads: 10
+    conda:
+        mainfolder+ "/yaml/kraken2.yaml"
+    shell:
+        "kraken2 --db {input[0]} --paired --threads {threads} "
+        "--report {output[0]} --output {output[1]} {input[1]} {input[2]}"
+rule kraken2_nt:
+    input:
+        "/mnt/kraken/my_kraken_db_nt",
+        "reads_1_trim.fastq.gz",
+        "reads_2_trim.fastq.gz"
+    output:
+        "my_kraken_db_nt_report",
+        "my_kraken_db_nt_output"
+    threads: 10
+    conda:
+        mainfolder+ "/yaml/kraken2.yaml"
+    shell:
+        "kraken2 --db {input[0]} --paired --threads {threads} "
+        "--report {output[0]} --output {output[1]} {input[1]} {input[2]}"
+
+
+rule Euk_read_ids_from_kraken_output_full:
+    input:
+        "my_kraken_db_prot_euk_k15_l12_output",
+        mainfolder + "/ArchBactVir_TaxIDs.txt"
+    output:
+        "Euk_reads_from_kraken_full.txt"
+    #conda:
+    #    "python.yaml"
+    shell:
+        "python {mainfolder}/scripts/get_euk_read_ids_from_kraken_output.py {input[0]} {output}"
+
+rule Euk_read_ids_from_kraken_output_nr:
+    input:
+        "my_kraken_db_nr_output",
+        mainfolder + "/ArchBactVir_TaxIDs.txt"
+    output:
+        "Euk_reads_from_kraken_nr.txt"
+    #conda:
+    #    "python.yaml"
+    shell:
+        "python {mainfolder}/scripts/get_euk_read_ids_from_kraken_output.py {input[0]} {output}"
+
+rule Euk_read_ids_from_kraken_output_nt:
+    input:
+        "my_kraken_db_nt_output",
+        mainfolder + "/ArchBactVir_TaxIDs.txt"
+    output:
+        "Euk_reads_from_kraken_nt.txt"
+    #conda:
+    #    "python.yaml"
+    shell:
+        "python {mainfolder}/scripts/get_euk_read_ids_from_kraken_output.py {input[0]} {output}"
+
+
+
+
+
+### Assembly without filtering
+rule megahit_unfiltered:
+    input:
+       "reads_1_trim.fastq.gz",
+       "reads_2_trim.fastq.gz"
+    output:
+       "megahit_unfiltered/final.contigs.fa"
+    conda:
+        mainfolder + "/yaml/megahit.yaml"
+    shell:
+        "rm -r megahit_unfiltered; "
+	"time megahit -1 {input[0]} -2 {input[1]} -o 'megahit_unfiltered' --min-contig-len 5000"
+
+rule EukRep_unfiltered:
+    input:
+        "megahit_unfiltered/final.contigs.fa"
+    output:
+        "EukRep_contigs_from_unfiltered.fasta"
+    shell:
+        "EukRep -i {input} -o {output} -m lenient --min 1"
+
+
+
+
+
+### 1 Assembly with filtering full
+rule seqtk_euk_subsetting_full_1:
+    input:
+        "reads_1_trim.fastq.gz",
+        "Euk_reads_from_kraken_full.txt"
+    output:
+        "reads_1_euk_full.fastq.gz"
+    conda:
+        mainfolder + "/yaml/seqtk.yaml"
+    shell:
+        "seqtk subseq {input} > reads_1_euk_full.fastq; "
+        "gzip reads_1_euk_full.fastq"
+
+
+rule seqtk_euk_subsetting_full_2:
+     input:
+         "reads_2_trim.fastq.gz",
+         "Euk_reads_from_kraken_full.txt"
+     output:
+         "reads_2_euk_full.fastq.gz"
+     conda:
+         mainfolder + "/yaml/seqtk.yaml"
+     shell:
+         "seqtk subseq {input} > reads_2_euk_full.fastq; "
+         "gzip reads_2_euk_full.fastq"
+
+
+rule megahit_filtered_full:
+    input:
+       "reads_1_euk_full.fastq.gz",
+       "reads_2_euk_full.fastq.gz",
+       "mapped_reads_percentages_three_krakens.tsv" #just to make sure to calculate results table first
+    output:
+       "megahit_filtered_full/final.contigs.fa"
+    conda:
+        mainfolder + "/yaml/megahit.yaml"
+    shell:
+        "rm -r megahit_filtered_full; "
+        "time megahit -1 {input[0]} -2 {input[1]} -o 'megahit_filtered_full' --min-contig-len 5000 "
+
+### 2 Assembly with filtering nr
+rule seqtk_euk_subsetting_nr_1:
+    input:
+        "reads_1_trim.fastq.gz",
+        "Euk_reads_from_kraken_nr.txt"
+    output:
+        "reads_1_euk_nr.fastq.gz"
+    conda:
+        mainfolder + "/yaml/seqtk.yaml"
+    shell:
+        "seqtk subseq {input} > reads_1_euk_nr.fastq; "
+        "gzip reads_1_euk_nr.fastq"
+
+
+rule seqtk_euk_subsetting_nr_2:
+     input:
+         "reads_2_trim.fastq.gz",
+         "Euk_reads_from_kraken_nr.txt"
+     output:
+         "reads_2_euk_nr.fastq.gz"
+     conda:
+         mainfolder + "/yaml/seqtk.yaml"
+     shell:
+         "seqtk subseq {input} > reads_2_euk_nr.fastq; "
+         "gzip reads_2_euk_nr.fastq"
+
+
+rule megahit_filtered_nr:
+    input:
+       "reads_1_euk_nr.fastq.gz",
+       "reads_2_euk_nr.fastq.gz",
+       "mapped_reads_percentages_three_krakens.tsv" #just to make sure to calculate results table first
+    output:
+       "megahit_filtered_nr/final.contigs.fa"
+    conda:
+        mainfolder + "/yaml/megahit.yaml"
+    shell:
+        "rm -r megahit_filtered_nr; "
+        "time megahit -1 {input[0]} -2 {input[1]} -o 'megahit_filtered_nr' --min-contig-len 5000 "
+
+### 3 Assembly with filtering nt
+rule seqtk_euk_subsetting_nt_1:
+    input:
+        "reads_1_trim.fastq.gz",
+        "Euk_reads_from_kraken_nt.txt"
+    output:
+        "reads_1_euk_nt.fastq.gz"
+    conda:
+        mainfolder + "/yaml/seqtk.yaml"
+    shell:
+        "seqtk subseq {input} > reads_1_euk_nt.fastq; "
+        "gzip reads_1_euk_nt.fastq"
+
+
+rule seqtk_euk_subsetting_nt_2:
+     input:
+         "reads_2_trim.fastq.gz",
+         "Euk_reads_from_kraken_nt.txt"
+     output:
+         "reads_2_euk_nt.fastq.gz"
+     conda:
+         mainfolder + "/yaml/seqtk.yaml"
+     shell:
+         "seqtk subseq {input} > reads_2_euk_nt.fastq; "
+         "gzip reads_2_euk_nt.fastq"
+
+
+rule megahit_filtered_nt:
+    input:
+       "reads_1_euk_nt.fastq.gz",
+       "reads_2_euk_nt.fastq.gz",
+       "mapped_reads_percentages_three_krakens.tsv" #just to make sure to calculate results table first
+    output:
+       "megahit_filtered_nt/final.contigs.fa"
+    conda:
+        mainfolder + "/yaml/megahit.yaml"
+    shell:
+        "rm -r megahit_filtered_nt; "
+        "time megahit -1 {input[0]} -2 {input[1]} -o 'megahit_filtered_nt' --min-contig-len 5000 "
+
+#rule QUAST_filtered
+
+
+### Mapping reads back to filtered contigs
+#rule bowtie2_index_filtered:
+#    input:
+#        "megahit_filtered/final.contigs.fa"
+#    output:
+#        "megahit_filtered/final.contigs.fa.1.bt2l"
+#    conda:
+#        mainfolder + "/yaml/bowtie2.yaml"
+#    threads: 60
+#    shell:
+#        "bowtie2-build -q --large-index --threads {threads} {input} megahit_filtered/final.contigs.fa"
+
+
+#rule bowtie2_map_filtered:
+#    input:
+#        "megahit_filtered/final.contigs.fa.1.bt2l",
+#        "reads_1_euk.fastq.gz",
+#        "reads_2_euk.fastq.gz"
+#    output:
+#        "bowtie2_filtered.sam"
+#    conda:
+#        mainfolder + "/yaml/bowtie2.yaml"
+#    threads: 60
+#    shell:
+#        "bowtie2 --local --omit-sec-seq -t --threads {threads} "
+       # "-x megahit_filtered/final.contigs.fa -1 {input[1]} -2 {input[2]} -S {output} 2>bowtie2_local_filtered.log"
+
+
+
+
+
+
+### Mapping reads back to UNfiltered contigs
+rule bowtie2_index_unfiltered:
+    input:
+        "megahit_unfiltered/final.contigs.fa"
+    output:
+        "megahit_unfiltered/final.contigs.fa.1.bt2l"
+    conda:
+        mainfolder + "/yaml/bowtie2.yaml"
+    threads: 60
+    shell: "bowtie2-build -q --large-index --threads {threads} {input} megahit_unfiltered/final.contigs.fa"
+        
+
+rule bowtie2_map_unfiltered:
+    input:
+        "megahit_unfiltered/final.contigs.fa.1.bt2l",
+        "reads_1_trim.fastq.gz",
+        "reads_2_trim.fastq.gz"
+    output:
+        "bowtie2_unfiltered.sam"
+    conda:
+        mainfolder + "/yaml/bowtie2.yaml"
+    threads: 60
+    shell:
+        "bowtie2 --local --omit-sec-seq -t --threads {threads} "
+        "-x megahit_unfiltered/final.contigs.fa -1 {input[1]} -2 {input[2]} -S {output} 2>bowtie2_local_unfiltered.log"
+
+
+### Checking which of reads mapped to euk contigs are actually non-Euks by Kraken opinion
+rule get_Euk_contig_names_unfiltered:
+    input:
+        "EukRep_contigs_from_unfiltered.fasta"
+    output:
+        "Euk_contig_IDs_unfiltered.txt"
+    shell:
+        "grep -Eo '^>[^ ]+' {input} | cut -c 2- > {output}"
+
+#rule get_mapped_read_ids_bowtie2_unfiltered:
+#    input:
+#        "bowtie2_unfiltered.sam",
+#        "Euk_contig_IDs_unfiltered.txt"
+#    output:
+#        "mapped_reads_bowtie2_unfiltered.sam.txt"
+#    #conda:
+#    #    "python.yaml"
+#    shell:
+#        "python {mainfolder}/scripts/python_get_mapped_reads_to_contigs.py {input}"
+
+rule calculate_mapped_read_percentages_full:
+    input:
+        #has to be in this particular order for python script
+        "bowtie2_unfiltered.sam",
+        "Euk_contig_IDs_unfiltered.txt",
+        "Euk_reads_from_kraken_full.txt",
+        "Euk_reads_from_kraken_nr.txt",
+        "Euk_reads_from_kraken_nt.txt",
+
+    output:
+        "mapped_reads_percentages_three_krakens.tsv"
+    #conda:
+    #    "python.yaml"
+    shell:
+        "python {mainfolder}/scripts/python_calculate_mapped_read_percentages_multiple_krakens.py {input} {output} {config[SAMPLE]}"
+
+
+rule QUAST:
+    input:
+        "megahit_unfiltered/final.contigs.fa",
+        "megahit_filtered_full/final.contigs.fa",
+        "megahit_filtered_nt/final.contigs.fa",
+        "megahit_filtered_nr/final.contigs.fa"
+    output:
+        directory("quast")
+    conda:
+        mainfolder + "/yaml/quast.yaml"
+    threads: 56
+    shell:
+        "quast -t {threads} -o {output} {input}"
+ 

@@ -1,0 +1,14 @@
+# gut samples from Eli
+# These are the samples from one gut metagenome research that showed the most euks 
+
+SAMPLESET:
+   - set2
+SAMPLE:
+   - SRR2047830
+   - SRR1822318
+   - SRR5963184
+   - SRR2047832
+   - SRR1793377
+   - SRR1197773
+   - ERR589567
+   - ERR1620279

@@ -1,0 +1,14 @@
+#These are the samples cherry-picked for different Euk content
+
+SAMPLESET:
+   - set1
+SAMPLE:
+   - SRR5918406 #  2
+   - SRR5788362 # 11
+   - SRR5788367 # 12
+   - SRR5788371 # 13
+   - SRR3989119 # 19
+   - SRR5917220 # 1 the most tested sample; copied from separate analysis
+   - SRR2844600 # 6 second the most tested sample, small; copied from separate analysis
+
+

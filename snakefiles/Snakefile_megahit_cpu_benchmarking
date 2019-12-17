@@ -1,0 +1,177 @@
+# This is the pipeline to test how parallelisation helps megahit speedup
+
+
+
+## Required config parameters:
+# SAMPLE - passed with config file by --configfile samples.yaml or --config SAMPLE=SRR2844600
+# SAMPLESET - for creating a subfolder dedicated to certain group of samples, listed in yaml file
+
+## Benchmarking mode?
+#benchmark=True
+benchmark=False
+
+if (benchmark==False):
+    downloading_script="download_fastq.sh"
+    mincontiglen=2000
+    EUK_PROFILES="/mnt/metaeuk_profiles/MMETSP_uniclust50_MERC_profiles_more_than1"
+else:
+    downloading_script="download_fastq_short.sh" # subsets only first 10k reads
+    mincontiglen=100 #otherwise no contigs left, too few reads for 5000kb+ contigs
+    EUK_PROFILES="/mnt/metaeuk_profiles_short/MMETSP_uniclust50_MERC_profiles_more_than1_few"
+
+
+# hardcoded parameters:
+mainfolder='/home/ubuntu/EukBook'
+setn=config["SAMPLESET"][0]
+
+
+
+rule all:
+    input:
+     # the samples themselves
+        expand("{setn}/{sample}/reads_1.fastq.gz", sample=config["SAMPLE"], setn=config["SAMPLESET"]),
+        #expand("{sample}/"reads_2.fastq.gz", sample=config["SAMPLE"]),
+        #expand("{sample}/"reads_1_trim.fastq.gz", sample=config["SAMPLE"]),
+        #expand("{sample}/"reads_2_trim.fastq.gz", sample=config["SAMPLE"]),
+        
+        #expand("{setn}/{sample}/quast_{sample}", sample=config["SAMPLE"], setn=setn),
+        #setn+"/quast_multi", # multisample quast for EukRep contigs from all samples. Easy to compare
+        #setn+"/EukRep_contigs_renamed_cat.fasta",
+        #setn+"/MetaEuk_preds.fasta",
+        expand(setn+"/{sample}/megahit_unfiltered_{n}", n=['56','28','14','7','3'], sample=config["SAMPLE"])
+        #BENCHMARKING:expand(setn+"/{sample}/megahit_unfiltered_{n}", n=['56'], sample=config["SAMPLE"])
+
+
+
+### Preprocessing
+rule download_fastq:
+    output: 
+        setn+"/{sample}/reads_1.fastq.gz",
+        setn+"/{sample}/reads_2.fastq.gz"
+    shell: 
+        "{mainfolder}/scripts/" + downloading_script + " {wildcards.sample} {output}" 
+
+
+rule FastQC_untrimmed:
+    input:
+        setn+"/{sample}/reads_1.fastq.gz",
+        setn+"/{sample}/reads_2.fastq.gz"
+    output:
+        setn+"/{sample}/reads_1_fastqc.html",
+        setn+"/{sample}/reads_2_fastqc.html"
+    conda:
+        mainfolder + "/yaml/conda_packages.yaml"
+    threads: 2
+    shell: 
+        "fastqc -t {threads} {input} "
+
+        
+rule fastp_trimming:
+    input: 
+        setn+"/{sample}/reads_1.fastq.gz",
+        setn+"/{sample}/reads_2.fastq.gz"
+    output: 
+        setn+"/{sample}/reads_1_trim.fastq.gz",
+        setn+"/{sample}/reads_2_trim.fastq.gz",
+        setn+"/{sample}/fastp.json",
+        setn+"/{sample}/fastp.html" 
+    threads: 4  
+    conda:
+        mainfolder + "/yaml/conda_packages.yaml"
+    shell: 
+        "fastp -r -w {threads} -i {input[0]} -I {input[1]} -o {output[0]} -O {output[1]} -j {output[2]} -h {output[3]}"
+
+
+rule FastQC_trimmed:
+    input:
+        setn+"/{sample}/reads_1_trim.fastq.gz",
+        setn+"/{sample}/reads_2_trim.fastq.gz"
+    output:
+        setn+"/{sample}/reads_1_trim_fastqc.html",
+        setn+"/{sample}/reads_2_trim_fastqc.html"
+        #output is the input without extentiuon plus "_fastqc.html". And "_fastqc.zip".
+    conda:
+        mainfolder + "/yaml/conda_packages.yaml"
+    threads: 2
+    shell:
+        "fastqc -t {threads} {input} "
+
+
+
+
+### Assembly without filtering
+#56
+rule megahit_unfiltered_56:
+    input:
+        setn+"/{sample}/reads_1_trim.fastq.gz",
+        setn+"/{sample}/reads_2_trim.fastq.gz"
+    output:
+        directory(setn+"/{sample}/megahit_unfiltered_56"),
+        setn+"/{sample}/log_megahit_56.txt" #{output[1]}
+    benchmark:
+        setn+"/{sample}/time_megahit_unfiltered_56.tsv"
+    conda:
+        mainfolder + "/yaml/megahit.yaml"
+    threads: 56
+    shell: "{{ time megahit -t {threads} -1 {input[0]} -2 {input[1]} -o {output[0]} --min-contig-len " + str(mincontiglen) + "; }} 2> {output[1]}; "
+
+#28
+rule megahit_unfiltered_28:
+    input:
+        setn+"/{sample}/reads_1_trim.fastq.gz",
+        setn+"/{sample}/reads_2_trim.fastq.gz"
+    output:
+        directory(setn+"/{sample}/megahit_unfiltered_28"),
+        setn+"/{sample}/log_megahit_28.txt" #{output[1]}
+    benchmark:
+        setn+"/{sample}/time_megahit_unfiltered_28.tsv"
+    conda:
+        mainfolder + "/yaml/megahit.yaml"
+    threads: 28
+    shell: "{{ time megahit -t {threads} -1 {input[0]} -2 {input[1]} -o {output[0]} --min-contig-len " + str(mincontiglen) + "; }} 2> {output[1]}; "
+#14
+rule megahit_unfiltered_14:
+    input:
+        setn+"/{sample}/reads_1_trim.fastq.gz",
+        setn+"/{sample}/reads_2_trim.fastq.gz"
+    output:
+        directory(setn+"/{sample}/megahit_unfiltered_14"),
+        setn+"/{sample}/log_megahit_14.txt" #{output[1]}
+    benchmark:
+        setn+"/{sample}/time_megahit_unfiltered_14.tsv"
+    conda:
+        mainfolder + "/yaml/megahit.yaml"
+    threads: 14
+    shell: "{{ time megahit -t {threads} -1 {input[0]} -2 {input[1]} -o {output[0]} --min-contig-len " + str(mincontiglen) + "; }} 2> {output[1]}; "
+#7
+rule megahit_unfiltered_7:
+    input:
+        setn+"/{sample}/reads_1_trim.fastq.gz",
+        setn+"/{sample}/reads_2_trim.fastq.gz"
+    output:
+        directory(setn+"/{sample}/megahit_unfiltered_7"),
+        setn+"/{sample}/log_megahit_7.txt" #{output[1]}
+    benchmark:
+        setn+"/{sample}/time_megahit_unfiltered_7.tsv"
+    conda:
+        mainfolder + "/yaml/megahit.yaml"
+    threads: 7
+    shell: "{{ time megahit -t {threads} -1 {input[0]} -2 {input[1]} -o {output[0]} --min-contig-len " + str(mincontiglen) + "; }} 2> {output[1]}; "
+#3
+rule megahit_unfiltered_3:
+    input:
+        setn+"/{sample}/reads_1_trim.fastq.gz",
+        setn+"/{sample}/reads_2_trim.fastq.gz"
+    output:
+        directory(setn+"/{sample}/megahit_unfiltered_3"),
+        setn+"/{sample}/log_megahit_3.txt" #{output[1]}
+    benchmark:
+        setn+"/{sample}/time_megahit_unfiltered_3.tsv"
+    conda:
+        mainfolder + "/yaml/megahit.yaml"
+    threads: 3
+    shell: "{{ time megahit -t {threads} -1 {input[0]} -2 {input[1]} -o {output[0]} --min-contig-len " + str(mincontiglen) + "; }} 2> {output[1]}; "
+
+
+
+
