@@ -5,3 +5,4 @@ dependencies:
   - fastqc =0.11.8
   - fastp =0.20.0
   - python =3.7.3
+  - multiqc =1.8

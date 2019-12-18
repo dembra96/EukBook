@@ -66,18 +66,19 @@ rule all:
         #expand("{sample}/"reads_1_trim.fastq.gz", sample=config["SAMPLE"]),
         #expand("{sample}/"reads_2_trim.fastq.gz", sample=config["SAMPLE"]),
      # can be ommited in benchmarking   
-        #expand("{sample}/reads_1_fastqc.html", sample=config["SAMPLE"]),
-        #expand("{sample}/reads_2_fastqc.html", sample=config["SAMPLE"]), 
-        #expand("{sample}/reads_1_trim_fastqc.html", sample=config["SAMPLE"]),
-        #expand("{sample}/reads_2_trim_fastqc.html", sample=config["SAMPLE"]),
+        #expand(setn+"/{sample}/reads_1_fastqc.html", sample=config["SAMPLE"]),
+        #expand(setn+"/{sample}/reads_2_fastqc.html", sample=config["SAMPLE"]), 
+        #expand(setn+"/{sample}/reads_1_trim_fastqc.html", sample=config["SAMPLE"]),
+        #expand(setn+"/{sample}/reads_2_trim_fastqc.html", sample=config["SAMPLE"]),
      # unfiltered pathway
         expand("{setn}/{sample}/megahit_unfiltered/final.contigs.fa", sample=config["SAMPLE"], setn=setn),      # --min-contig-len 500
         expand("{setn}/{sample}/EukRep_contigs_from_unfiltered.fasta", sample=config["SAMPLE"], setn=setn),   # -m lenient
         #expand("{setn}/{sample}/quast_{sample}", sample=config["SAMPLE"], setn=setn),
-        setn+"/quast_multi_raw",
-        setn+"/quast_multi_EukRep", # multisample quast for EukRep contigs from all samples. Easy to compare
+        #setn+"/quast_multi_raw",
+        #setn+"/quast_multi_EukRep", # multisample quast for EukRep contigs from all samples. Easy to compare
         setn+"/EukRep_contigs_renamed_cat.fasta",
         setn+"/MetaEuk_preds.fasta",
+        setn+"/multiqc_report.html",
 
 
 
@@ -232,3 +233,18 @@ rule MetaEuk_easy_predict:
         " --metaeuk-eval 0.0001 -e 100 --slice-search --min-ungapped-score 35"
         " --min-length 40 --min-exon-aa 20 --metaeuk-tcov 0.6; }} 2> {log}"
 
+# MultiQC
+rule MultiQC:
+    input:
+        expand(setn+"/{sample}/{file}", sample=config["SAMPLE"], file=['reads_1_fastqc.html', 'reads_2_fastqc.html', 'reads_1_trim_fastqc.html', 'reads_2_trim_fastqc.html', 'fastp.html']),
+        expand(setn+"/{file}", file=['quast_multi_raw', 'quast_multi_EukRep'])
+    output:
+        setn+"/multiqc_report.html",
+        directory(setn+"/multiqc_data")
+    conda:
+        mainfolder + "/yaml/conda_packages.yaml"
+    shell:
+        "multiqc -d -f -o "+setn+" "+setn+"/"
+# -d option makes multiqc analyse all samples with same names. In our case all samples are reads_1/2, so this is crucial
+# -f option makes force overwrite of previous multiqc output. Important for Snakemake reruns.
+# -o specifies outdir of output files
