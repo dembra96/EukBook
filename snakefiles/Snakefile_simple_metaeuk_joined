@@ -9,8 +9,8 @@
 
 ## Benchmarking mode?
 
-#benchmark=True
-benchmark=False
+benchmark=True
+#benchmark=False
 
 if (benchmark==False):
     downloading_script="download_fastq.sh"
@@ -192,6 +192,8 @@ rule QUAST_multisample_EukRep:
         #"time quast -t {threads} --silent -o {output} {input}"
         "quast -t {threads} --min-contig "+str(mincontiglen)+" --silent -o {output} {input}"
 
+
+
 # Concatenating all EukRep contigs
 rule contig_concatenating:
     input:
@@ -200,6 +202,8 @@ rule contig_concatenating:
         setn+"/EukRep_contigs_renamed_cat.fasta"
     shell:
         mainfolder + "/scripts/contig_rename_concat.sh {output} {input}" 
+
+
 
 # MetaEuk 
 rule MetaEuk_createdb:
@@ -212,45 +216,19 @@ rule MetaEuk_createdb:
         "mkdir -p {output}; "
         "metaeuk createdb {input} {output}/contigs --dbtype 2"
 
-
-rule MetaEuk_predictexons:
+rule MetaEuk_easy_predict:
     input:
-        setn+"/contigs_db"
+        setn+"/contigs_db", #{input[0]}
+        EUK_PROFILES        #{input[1]}
     output:
-        directory(setn+"/MetaEuk_calls"),
+        setn+"/MetaEuk_preds.fasta",        #{output[0]}
         directory(setn+"/tempFolder") #{output[1]}
     log:
-        setn+"/log_MetaEuk_predictexons.txt"
+        setn+"/log_MetaEuk_easypredict.txt"
     threads: maxthreads
     resources: mem_mb=120000
     shell:
-        "mkdir -p {output[0]}; "
-        "{{ time metaeuk predictexons {input}/contigs "+EUK_PROFILES+ 
-        " {output[0]}/MetaEuk_calls {output[1]}"
+        "{{ time metaeuk easy-predict {input[0]}/contigs {input[1]} {output[0]} {output[1]}"
         " --metaeuk-eval 0.0001 -e 100 --slice-search --min-ungapped-score 35"
         " --min-length 40 --min-exon-aa 20 --metaeuk-tcov 0.6; }} 2> {log}"
-        
-
-rule MetaEuk_reduceredundancy:
-    input:
-        setn+"/MetaEuk_calls"
-    output:
-        directory(setn+"/MetaEuk_preds")
-    threads: maxthreads
-    shell:
-        "mkdir {output}; "
-        "metaeuk reduceredundancy {input}/MetaEuk_calls"
-        " {output}/MetaEuk_preds {output}/MetaEuk_preds_clust"
-
-rule MetaEuk_unitesetnstofasta:
-    input:
-        setn+"/contigs_db",
-        setn+"/MetaEuk_preds"
-    output:
-        directory(setn+"/MetaEuk_preds.fasta")
-    threads: maxthreads
-    shell:    
-        "mkdir {output}; "
-        "metaeuk unitesetstofasta {input[0]}/contigs "+EUK_PROFILES+
-        " {input[1]}/MetaEuk_preds {output}/MetaEuk_preds.fasta --protein 1"
 
