@@ -9,8 +9,8 @@
 
 ## Benchmarking mode?
 
-benchmark=True
-#benchmark=False
+#benchmark=True
+benchmark=False
 
 if (benchmark==False):
     downloading_script="download_fastq.sh"
@@ -41,15 +41,15 @@ elif type(config["SAMPLESET"]) is str:
 # Email notifications
 onstart:
     print("Workflow finished, no error")
-    shell("mail -s 'Snakemake - Workflow started' dembra96@gmail.com < {log}" )
+    shell("mail -s 'Snakemake "+setn+" - Workflow started' dembra96@gmail.com < {log}" )
 
 onsuccess:
     print("Workflow finished, no error")
-    shell("mail -s 'Snakemake - Workflow successfully finished' dembra96@gmail.com < {log}")
+    shell("mail -s 'Snakemake "+setn+" - Workflow successfully finished' dembra96@gmail.com < {log}")
 
 onerror:
     print("An error occurred")
-    shell("mail -s 'Snakemake - an error occurred' dembra96@gmail.com < {log}")
+    shell("mail -s 'Snakemake "+setn+" - an error occurred' dembra96@gmail.com < {log}")
 
 
 
@@ -71,11 +71,14 @@ rule all:
         #expand(setn+"/{sample}/reads_1_trim_fastqc.html", sample=config["SAMPLE"]),
         #expand(setn+"/{sample}/reads_2_trim_fastqc.html", sample=config["SAMPLE"]),
      # unfiltered pathway
-        expand("{setn}/{sample}/megahit_unfiltered/final.contigs.fa", sample=config["SAMPLE"], setn=setn),      # --min-contig-len 500
-        expand("{setn}/{sample}/EukRep_contigs_from_unfiltered.fasta", sample=config["SAMPLE"], setn=setn),   # -m lenient
+        #expand("{setn}/{sample}/megahit_unfiltered", sample=config["SAMPLE"], setn=setn),      # --min-contig-len 500
+        #expand(setn+"/{sample}/contigs.megahit.fa", sample=config["SAMPLE"]),
+        expand(setn+"/{sample}/contigs.megahit.sizefiltered.fa", sample=config["SAMPLE"]),
+        #expand("{setn}/{sample}/contigs.EukRep.fa", sample=config["SAMPLE"], setn=setn),   # -m lenient
         #expand("{setn}/{sample}/quast_{sample}", sample=config["SAMPLE"], setn=setn),
-        #setn+"/quast_multi_raw",
-        #setn+"/quast_multi_EukRep", # multisample quast for EukRep contigs from all samples. Easy to compare
+        setn+"/quast_multi_raw",
+        setn+"/quast_multi_EukRep", # multisample quast for EukRep contigs from all samples. 
+        setn+"/quast_multi_filt_raw",
         setn+"/EukRep_contigs_renamed_cat.fasta",
         setn+"/MetaEuk_preds.fasta",
         setn+"/multiqc_report.html",
@@ -145,7 +148,8 @@ rule megahit_unfiltered:
         setn+"/{sample}/reads_1_trim.fastq.gz",
         setn+"/{sample}/reads_2_trim.fastq.gz"
     output:
-        setn+"/{sample}/megahit_unfiltered/final.contigs.fa",
+        directory(setn+"/{sample}/megahit_unfiltered"), #{output[0]}
+        setn+"/{sample}/contigs.megahit.fa" #{output[1]}
     log:
         setn+"/{sample}/log_megahit.txt"
     conda:
@@ -153,25 +157,39 @@ rule megahit_unfiltered:
     threads: int( maxthreads * 0.5 )
 #this will allow two megahits run in parallell and make sure all cores are 100% busy al the time, because with single megahit on all cores they are ~75% occupied on average.
     shell:
-        "rm -r "+setn+"/{wildcards.sample}/megahit_unfiltered; "
-	"{{ time megahit -t "+str(maxthreads)+" -1 {input[0]} -2 {input[1]} -o '"+setn+"/{wildcards.sample}/megahit_unfiltered' --min-contig-len 500; }} 2> {log}; "
+        #"rm -r "+setn+"/{wildcards.sample}/megahit_unfiltered; "
+        "{{ time megahit -t "+str(maxthreads)+" -1 {input[0]} -2 {input[1]} -o {output[0]} --min-contig-len 500; }} 2> {log}; "
+        "cp {output[0]}/final.contigs.fa {output[1]}; " # copy results one folder up
         "touch {setn}/{wildcards.sample}/checkpoint_{wildcards.sample}_is_done.txt" 
 
-rule EukRep_unfiltered:
+rule raw_contigs_size_filtering:
     input:
-        setn+"/{sample}/megahit_unfiltered/final.contigs.fa"
+        setn+"/{sample}/contigs.megahit.fa"
     output:
-        setn+"/{sample}/EukRep_contigs_from_unfiltered.fasta"
+        setn+"/{sample}/contigs.megahit.sizefiltered.fa"
+    shell:
+        #for fasta:
+        'awk \'BEGIN {{FS = "\\t" ; OFS = "\\n"}} {{header = $0 ; getline seq ; if (length(seq) >= '+str(mincontiglen)+') {{print header, seq}}}}\' < {input} > {output}; '
+        #for fastq (but I have fasta):
+        #'awk \'BEGIN {{FS = "\\t" ; OFS = "\\n"}} {{header = $0 ; getline seq ; getline qheader ; getline qseq ; if (length(seq) >= '+str(mincontiglen)+') {{print header, seq, qheader, qseq}}}}\' < {input} > {output}; '
+# ALWAYS escape { } \ by {{ }} \\ in snakemake, if you want to pass { } \ to a command, such as awk 
+
+
+rule EukRep:
+    input:
+        setn+"/{sample}/contigs.megahit.sizefiltered.fa"
+    output:
+        setn+"/{sample}/contigs.EukRep.fa"
     log:
         setn+"/{sample}/log_EukRep.txt"
     shell:
-        "{{ time EukRep -i {input} -o {output} -m lenient --min "+str(mincontiglen)+" ; }} 2> {log} ; "
+        "{{ time EukRep -i {input} -o {output} -m lenient; }} 2> {log} ; "
 
 # QUAST
 
 rule QUAST_multisample_raw_contigs:
     input:
-        expand("{setn}/{sample}/megahit_unfiltered/final.contigs.fa", sample=config["SAMPLE"],setn=setn)
+        expand("{setn}/{sample}/contigs.megahit.fa", sample=config["SAMPLE"],setn=setn)
     output:
         directory(setn+"/quast_multi_raw")
     conda:
@@ -179,11 +197,22 @@ rule QUAST_multisample_raw_contigs:
     threads: 4
     shell:
         #"time quast -t {threads} --silent -o {output} {input}"
-        "quast -t {threads} --min-contig "+str(mincontiglen)+" --silent -o {output} {input}"
+        "quast -t {threads} --silent -o {output} {input}"
+
+rule QUAST_multisample_raw_contigs_sizefiltered:
+    input:
+        expand("{setn}/{sample}/contigs.megahit.sizefiltered.fa", sample=config["SAMPLE"],setn=setn)
+    output:
+        directory(setn+"/quast_multi_filt_raw")
+    conda:
+        mainfolder + "/yaml/quast.yaml"
+    threads: 4
+    shell:
+        "quast -t {threads} --silent -o {output} {input}; "
 
 rule QUAST_multisample_EukRep:
     input:
-        expand("{setn}/{sample}/EukRep_contigs_from_unfiltered.fasta", sample=config["SAMPLE"],setn=setn)
+        expand("{setn}/{sample}/contigs.EukRep.fa", sample=config["SAMPLE"],setn=setn)
     output:
         directory(setn+"/quast_multi_EukRep")
     conda:
@@ -191,14 +220,14 @@ rule QUAST_multisample_EukRep:
     threads: 4
     shell: 
         #"time quast -t {threads} --silent -o {output} {input}"
-        "quast -t {threads} --min-contig "+str(mincontiglen)+" --silent -o {output} {input}"
+        "quast -t {threads} --silent -o {output} {input}"
 
 
 
 # Concatenating all EukRep contigs
 rule contig_concatenating:
     input:
-        expand("{setn}/{sample}/EukRep_contigs_from_unfiltered.fasta", sample=config["SAMPLE"],setn=setn)
+        expand("{setn}/{sample}/contigs.EukRep.fa", sample=config["SAMPLE"],setn=setn)
     output:
         setn+"/EukRep_contigs_renamed_cat.fasta"
     shell:
@@ -237,7 +266,7 @@ rule MetaEuk_easy_predict:
 rule MultiQC:
     input:
         expand(setn+"/{sample}/{file}", sample=config["SAMPLE"], file=['reads_1_fastqc.html', 'reads_2_fastqc.html', 'reads_1_trim_fastqc.html', 'reads_2_trim_fastqc.html', 'fastp.html']),
-        expand(setn+"/{file}", file=['quast_multi_raw', 'quast_multi_EukRep'])
+        expand(setn+"/{file}", file=['quast_multi_raw', 'quast_multi_EukRep', 'quast_multi_filt_raw'])
     output:
         setn+"/multiqc_report.html",
         directory(setn+"/multiqc_data")
