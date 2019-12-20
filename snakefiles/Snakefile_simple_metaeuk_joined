@@ -58,32 +58,50 @@ onerror:
 ### Workflow ###
 ################
 
-rule all:
-    input:
-     # the samples themselves
-        #expand("{setn}/{sample}/reads_1.fastq.gz", sample=config["SAMPLE"], setn=config["SAMPLESET"]),
-        #expand("{sample}/"reads_2.fastq.gz", sample=config["SAMPLE"]),
-        #expand("{sample}/"reads_1_trim.fastq.gz", sample=config["SAMPLE"]),
-        #expand("{sample}/"reads_2_trim.fastq.gz", sample=config["SAMPLE"]),
-     # can be ommited in benchmarking   
-        #expand(setn+"/{sample}/reads_1_fastqc.html", sample=config["SAMPLE"]),
-        #expand(setn+"/{sample}/reads_2_fastqc.html", sample=config["SAMPLE"]), 
-        #expand(setn+"/{sample}/reads_1_trim_fastqc.html", sample=config["SAMPLE"]),
-        #expand(setn+"/{sample}/reads_2_trim_fastqc.html", sample=config["SAMPLE"]),
-     # unfiltered pathway
-        #expand("{setn}/{sample}/megahit_unfiltered", sample=config["SAMPLE"], setn=setn),      # --min-contig-len 500
-        #expand(setn+"/{sample}/contigs.megahit.fa", sample=config["SAMPLE"]),
-        expand(setn+"/{sample}/contigs.megahit.sizefiltered.fa", sample=config["SAMPLE"]),
-        #expand("{setn}/{sample}/contigs.EukRep.fa", sample=config["SAMPLE"], setn=setn),   # -m lenient
-        #expand("{setn}/{sample}/quast_{sample}", sample=config["SAMPLE"], setn=setn),
+#rule all:
+#    input:
+
+#rule mc_copy:
+#    input:
+
+#compress all needed files
+rule tar:
+    input: 
+        ##REPORTS
+        reports = [
+        #FastQC
+        expand(setn+"/{sample}/reads_{n}{trim}_fastqc.{ext}", 
+               sample=config["SAMPLE"], n=["1","2"], trim=["","_trim"], ext=["html","zip"]),
+        #Fastp
+        expand(setn+"/{sample}/fastp.html", sample=config["SAMPLE"]),
+        expand(setn+"/{sample}/fastp.json", sample=config["SAMPLE"]),
+        #QUAST
         setn+"/quast_multi_raw",
-        setn+"/quast_multi_EukRep", # multisample quast for EukRep contigs from all samples. 
         setn+"/quast_multi_filt_raw",
-        setn+"/EukRep_contigs_renamed_cat.fasta",
-        setn+"/MetaEuk_preds.fasta",
+        setn+"/quast_multi_EukRep", 
+        #MultiQC
         setn+"/multiqc_report.html",
-
-
+        setn+"/multiqc_data",
+        #logs
+        setn+"/log_MetaEuk_easypredict.txt",
+        expand(setn+"/{sample}/log_megahit.txt", sample=config["SAMPLE"]),
+        expand(setn+"/{sample}/log_EukRep.txt", sample=config["SAMPLE"])],
+        
+        ## RESULTS
+        #Megahit
+        megahit = expand(setn+"/{sample}/contigs.megahit.fa", sample=config["SAMPLE"]),
+        #EukRep
+        eukrep = expand(setn+"/{sample}/contigs.EukRep.fa", sample=config["SAMPLE"]),
+        #MetaEuk
+	metaeuk = [setn+"/MetaEuk_preds.fasta",
+                   setn+"/MetaEuk_preds.fasta.headersMap.tsv"],
+    output:
+        report = setn+".reports.tar.gz",
+        main = setn+".tar.gz"
+    shell:
+        "tar -czvf {output.report} {input.reports} & "
+        "tar -czvf {output.main} {input} {setn}/tempFolder/latest/{{contigs*,MetaEuk_preds.*}}"
+        #tars are executed in parrallel
 
 ### Preprocessing
 rule download_fastq:
@@ -99,8 +117,7 @@ rule FastQC_untrimmed:
         setn+"/{sample}/reads_1.fastq.gz",
         setn+"/{sample}/reads_2.fastq.gz"
     output:
-        setn+"/{sample}/reads_1_fastqc.html",
-        setn+"/{sample}/reads_2_fastqc.html"
+        expand(setn+"/{{sample}}/reads_{n}_fastqc.{ext}", n=["1","2"], ext=["html","zip"]),
     conda:
         mainfolder + "/yaml/conda_packages.yaml"
     threads: 2
@@ -129,9 +146,7 @@ rule FastQC_trimmed:
         setn+"/{sample}/reads_1_trim.fastq.gz",
         setn+"/{sample}/reads_2_trim.fastq.gz"
     output:
-        setn+"/{sample}/reads_1_trim_fastqc.html",
-        setn+"/{sample}/reads_2_trim_fastqc.html"
-        #output is the input without extentiuon plus "_fastqc.html". And "_fastqc.zip".
+        expand(setn+"/{{sample}}/reads_{n}_trim_fastqc.{ext}", n=["1","2"], ext=["html","zip"]),
     conda:
         mainfolder + "/yaml/conda_packages.yaml"
     threads: 2
@@ -183,7 +198,7 @@ rule EukRep:
     log:
         setn+"/{sample}/log_EukRep.txt"
     shell:
-        "{{ time EukRep -i {input} -o {output} -m lenient; }} 2> {log} ; "
+        "{{ time EukRep -i {input} -o {output} -m lenient --min "+str(mincontiglen)+"; }} 2> {log} ; "
 
 # QUAST
 
@@ -197,7 +212,7 @@ rule QUAST_multisample_raw_contigs:
     threads: 4
     shell:
         #"time quast -t {threads} --silent -o {output} {input}"
-        "quast -t {threads} --silent -o {output} {input}"
+        "quast -t {threads} --silent --min-contig "+str(mincontiglen)+" -o {output} {input}"
 
 rule QUAST_multisample_raw_contigs_sizefiltered:
     input:
@@ -208,7 +223,7 @@ rule QUAST_multisample_raw_contigs_sizefiltered:
         mainfolder + "/yaml/quast.yaml"
     threads: 4
     shell:
-        "quast -t {threads} --silent -o {output} {input}; "
+        "quast -t {threads} --silent --min-contig "+str(mincontiglen)+" -o {output} {input}; "
 
 rule QUAST_multisample_EukRep:
     input:
@@ -220,7 +235,7 @@ rule QUAST_multisample_EukRep:
     threads: 4
     shell: 
         #"time quast -t {threads} --silent -o {output} {input}"
-        "quast -t {threads} --silent -o {output} {input}"
+        "quast -t {threads} --silent --min-contig "+str(mincontiglen)+" -o {output} {input}"
 
 
 
@@ -234,33 +249,24 @@ rule contig_concatenating:
         mainfolder + "/scripts/contig_rename_concat.sh {output} {input}" 
 
 
-
 # MetaEuk 
-rule MetaEuk_createdb:
-    input:
-        setn+"/EukRep_contigs_renamed_cat.fasta"
-    output:
-        directory(setn+"/contigs_db")
-    threads: maxthreads
-    shell:
-        "mkdir -p {output}; "
-        "metaeuk createdb {input} {output}/contigs --dbtype 2"
-
 rule MetaEuk_easy_predict:
     input:
-        setn+"/contigs_db", #{input[0]}
+        setn+"/EukRep_contigs_renamed_cat.fasta", #{input[0]}
         EUK_PROFILES        #{input[1]}
     output:
         setn+"/MetaEuk_preds.fasta",        #{output[0]}
-        directory(setn+"/tempFolder") #{output[1]}
+        directory(setn+"/tempFolder"), #{output[1]}
+        setn+"/MetaEuk_preds.fasta.headersMap.tsv", #just need to indicate it here so tar ruleknows where to find it. no need to specify it in metaeuk command.
     log:
         setn+"/log_MetaEuk_easypredict.txt"
     threads: maxthreads
     resources: mem_mb=120000
     shell:
-        "{{ time metaeuk easy-predict {input[0]}/contigs {input[1]} {output[0]} {output[1]}"
+        "{{ time metaeuk easy-predict {input[0]} {input[1]} {output[0]} {output[1]}"
         " --metaeuk-eval 0.0001 -e 100 --slice-search --min-ungapped-score 35"
-        " --min-length 40 --min-exon-aa 20 --metaeuk-tcov 0.6; }} 2> {log}"
+        " --min-length 40 --min-exon-aa 20 --metaeuk-tcov 0.6; }} > {log} 2>&1"
+
 
 # MultiQC
 rule MultiQC:
