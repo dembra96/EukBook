@@ -61,8 +61,17 @@ onerror:
 #rule all:
 #    input:
 
-#rule mc_copy:
-#    input:
+rule mc_copy:
+    input:
+        setn+".reports.tar.gz",
+        setn+".tar.gz",
+        setn+"_samples.txt",
+    output:
+        setn+"_copied" #checkpoint file
+    shell:
+        "mc cp {input} eukupload/eukcontainer/batch1/; "
+        "touch {output}; "
+        #"rm -r "+ setn # DELETES the original folder
 
 #compress all needed files
 rule tar:
@@ -102,6 +111,20 @@ rule tar:
         "tar -czvf {output.report} {input.reports} & "
         "tar -czvf {output.main} {input} {setn}/tempFolder/latest/{{contigs*,MetaEuk_preds.*}}"
         #tars are executed in parrallel
+
+#rule to save sample accessions provided in yaml as simple text list to copy to remote container.
+rule write_samples:
+    output:
+        setn+"_samples.txt"
+    run:
+        with open(output[0], 'w') as f:
+            for item in config["SAMPLE"]:
+                f.write("%s\n" % item)
+    
+
+
+
+
 
 ### Preprocessing
 rule download_fastq:
