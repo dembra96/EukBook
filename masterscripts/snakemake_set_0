@@ -1,0 +1,1 @@
+snakemake -p -s ~/EukBook/snakefiles/Snakefile_simple_metaeuk_joined -d /mnt/samples/simple/ -j --use-conda --configfile ~/EukBook/sample_yamls/set_0.yaml -P set_0/SRR8819330/contigs.megahit.fa

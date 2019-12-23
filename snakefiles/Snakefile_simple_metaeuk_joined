@@ -192,11 +192,11 @@ rule megahit_unfiltered:
         setn+"/{sample}/log_megahit.txt"
     conda:
         mainfolder + "/yaml/megahit.yaml"
-    threads: int( maxthreads * 0.5 )
+    threads: 7 
 #this will allow two megahits run in parallell and make sure all cores are 100% busy al the time, because with single megahit on all cores they are ~75% occupied on average.
     shell:
         #"rm -r "+setn+"/{wildcards.sample}/megahit_unfiltered; "
-        "{{ time megahit -t "+str(maxthreads)+" -1 {input[0]} -2 {input[1]} -o {output[0]} --min-contig-len 500; }} 2> {log}; "
+        "{{ time megahit -t 14 -1 {input[0]} -2 {input[1]} -o {output[0]} --min-contig-len 500; }} 2> {log}; "
         "cp {output[0]}/final.contigs.fa {output[1]}; " # copy results one folder up
         "touch {setn}/{wildcards.sample}/checkpoint_{wildcards.sample}_is_done.txt" 
 
