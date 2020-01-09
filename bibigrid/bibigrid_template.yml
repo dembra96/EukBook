@@ -1,0 +1,85 @@
+mode: openstack
+#credentialsFile: /Users/agsoeding/eukbook/clouds.yaml 
+
+# ACCESS
+
+# BiBigrid uses since version 2.0.9 one-time ssh keys to access
+# a running cluster. Additonal public keys can be added.
+# comment out to add a single public key
+#sshPublicKeyFile: 
+# comment out to add a list of public keys
+#sshPublicKeyFiles:
+#  - 
+
+# Depends on cloud image
+sshUser: ubuntu
+
+# Depends on cloud site:
+# Berlin     : regionOne
+# Bielefeld  : bielefeld
+# DKFZ       : regionOne
+# Giessen    : RegionOne
+# Heidelberg : RegionOne
+# Tuebingen  : RegionOne
+region: bielefeld 
+
+# Depends on cloud site:
+# Berlin     : nova
+# Bielefeld  : default
+# DKFZ       : nova
+# Giessen    : nova
+# Heidelberg : nova
+# Tuebingen  : nova
+availabilityZone: default 
+
+# Depends on cloud site and project
+# subnet: 
+
+# Uncomment if no full DNS service for started instances is available.
+# Currently the case in Berlin, DKFZ, Heidelberg and Tuebingen.
+#localDNSLookup: yes
+
+# Uncomment if you don't want assign a public ip to the master.
+# Currently the case at Tuebingen or for internal cluster.
+#useMasterWithPublicIp: no
+
+
+# master configuration 
+masterInstance:
+  type: de.NBI mini 
+  image: c66118a6-fc9c-4771-8709-d91d5eac1c72 
+
+# worker configuration
+workerInstances:
+  - type: de.NBI tiny 
+    image: c66118a6-fc9c-4771-8709-d91d5eac1c72
+    count: 2 
+
+
+useMasterAsCompute: yes 
+
+
+# Services
+# A full list of supported service is available at the de.NBI BiBiGrid 
+# Tutorial (https://cloud.denbi.de/wiki/) or at BiBiGrid GitHub 
+# repository (https://github.com/BiBiServ/bibigrid) 
+
+
+# Enable configuring a SLURM cluster 
+slurm: yes
+# Create a shared file system between all nodes (/vol/spool)
+nfs: yes
+# Configure Theia Web IDE on master node
+theia: no
+
+
+
+# The program was yelling at me that it can't find a router, no router specified.
+router: my_router
+# Then it yells that I exceed network quota. I guess I need to explicitly specify an existing network
+network: my_network
+#same for subnet
+subnet: 9bda0553-900c-4a94-927d-d07ffd7de3f9
+#also I had to release the floating IP, because bibigrid wants a new one :,(
+
+#IDE failed, removing IDE (theia, higher)

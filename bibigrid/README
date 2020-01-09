@@ -1,0 +1,21 @@
+# BiBiGrid access
+
+## ~/bin/bibigrid
+Shell script I made that sets the user/pass envrionment variables (see below) to authenticate itself against the OpenStack  and then calls the bibigrid java file
+
+You can just run a command like the following and shouldn't have to worry about the authentication or java anymore:
+```
+bibigrid -ch -o template.yml 
+```
+
+## eukbook/EukMetaAssmbly-openrc.sh
+This file contains (as envrionment variables) username/password etc that the OpenStack cloud needs. You should not have to change this file at all.s
+
+## eukbook/bibigrid_template.yml
+This file you need to edit to specify what machines you want, the deNBI wiki should have documentation for that. 
+
+## Accessing master node
+No idea, read the wiki, you'll have to deal with pub/private keys somehow, i think bibigrid will generate some for you, which you then can use with ssh (`ssh -I priv_key`).
+
+## SLURM
+BiBiGrid should have a slurm ready on the master node. Eli will be able to help with SLURM

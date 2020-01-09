@@ -1,0 +1,3 @@
+#!/bin/sh -e
+source $HOME/EukBook/bibigrid/EukMetaAssmbly-openrc.sh
+exec java -jar $HOME/EukBook/bibigrid/bibigrid.jar "$@"
