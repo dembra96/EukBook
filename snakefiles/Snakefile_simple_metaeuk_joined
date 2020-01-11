@@ -114,8 +114,8 @@ rule tar:
         report = setn+".reports.tar.gz",
         main = setn+".tar.gz"
     shell:
-        "tar -czvf {output.report} {input.reports} & "
-        "tar -czvf {output.main} {input} {setn}/tempFolder/latest/{{contigs*,MetaEuk_preds.*}}"
+        "tar -czf {output.report} {input.reports} & "
+        "tar -czf {output.main} {input} {setn}/tempFolder/latest/{{contigs*,MetaEuk_preds.*}}"
         #tars are executed in parrallel
 
 #rule to save sample accessions provided in yaml as simple text list to copy to remote container.
@@ -133,17 +133,25 @@ rule GET_METAEUK_PROTEIN_PROFILES:
     output:
         "/mnt/metaeuk_profiles/metaeuk_ref_more_than1_MMETSP_zenodo_3247846_profiles"
     shell:
-        "wget http://wwwuser.gwdg.de/~elevyka/metaeuk_ref_more_than1_MMETSP_zenodo_3247846_profiles.tar.gz; "
+        "if mc cp --recursive eukupload/eukcontainer/metaeuk_profiles /mnt/ ; "
+        "then echo 'Protein profiles successfully copied from eukcontainer mc copy.'; "
+        "else wget http://wwwuser.gwdg.de/~elevyka/metaeuk_ref_more_than1_MMETSP_zenodo_3247846_profiles.tar.gz; "
         "tar -C /mnt/metaeuk_profiles -xzf metaeuk_ref_more_than1_MMETSP_zenodo_3247846_profiles.tar.gz; "
-        "rm metaeuk_ref_more_than1_MMETSP_zenodo_3247846_profiles.tar.gz"
+        "rm metaeuk_ref_more_than1_MMETSP_zenodo_3247846_profiles.tar.gz; "
+        "echo 'Protein profiles successfully downloaded from gwdg server.'; "
+        "fi; "
 
 rule GET_METAEUK_PROTEIN_PROFILES_short:
     output:
-        directory("/mnt/metaeuk_profiles/MMETSP_uniclust50_MERC_profiles_more_than1_few")
+        "/mnt/metaeuk_profiles_short/MMETSP_uniclust50_MERC_profiles_more_than1_few"
     shell:
-        "wget http://wwwuser.gwdg.de/~elevyka/metaeuk_ref_more_than1_MMETSP_zenodo_3247846_profiles.tar.gz; "
-        "tar -C /mnt/metaeuk_profiles -xzf metaeuk_ref_more_than1_MMETSP_zenodo_3247846_profiles.tar.gz; "
-        "rm metaeuk_ref_more_than1_MMETSP_zenodo_3247846_profiles.tar.gz"
+        "if mc cp --recursive eukupload/eukcontainer/metaeuk_profiles_short /mnt/ ; "
+        "then echo 'Protein profiles successfully copied from eukcontainer mc copy.'; "
+        "else wget http://wwwuser.gwdg.de/~elevyka/MMETSP_uniclust50_MERC_profiles_more_than1_few.tar.gz; "
+        "tar -C /mnt/metaeuk_profiles_short -xzf MMETSP_uniclust50_MERC_profiles_more_than1_few.tar.gz; "
+        "rm MMETSP_uniclust50_MERC_profiles_more_than1_few.tar.gz; "
+        "echo 'Protein profiles successfully downloaded from gwdg server.'; "
+        "fi; "
 
 
 
