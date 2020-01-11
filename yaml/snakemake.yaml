@@ -2,6 +2,6 @@ channels:
   - conda-forge
   - bioconda
 dependencies:
-  - bioconda::snakemake-minimal =5.7.0
+  - bioconda::snakemake-minimal =5.9.1
   - graphviz =2.38.0
 

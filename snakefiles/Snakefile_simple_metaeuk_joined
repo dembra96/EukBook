@@ -6,6 +6,11 @@
 ## Required config parameters:
 # SAMPLE - passed with config file by --configfile samples.yaml or --config SAMPLE=SRR2844600
 # SAMPLESET - for creating a subfolder dedicated to certain group of samples, listed in yaml file
+# The batch number. It is the subfolder in our remote MinIO container,
+# where our results are saved. A new batch makes new calculations for samples,
+# that were already calculated for earlier batch. This is made to treat new versions
+# of pipeline separately and don`t override old results.
+BATCH="batch2" 
 
 ## Benchmarking mode?
 
@@ -15,12 +20,13 @@ benchmark=False
 if (benchmark==False):
     downloading_script="download_fastq.sh"
     mincontiglen=5000
-    EUK_PROFILES="/mnt/metaeuk_profiles/MMETSP_uniclust50_MERC_profiles_more_than1"
+    EUK_PROFILES="/mnt/metaeuk_profiles/metaeuk_ref_profiles_more_than1_MMETSP_zenodo_3247846_profiles"
+    BATCH=BATCH
 else:
     downloading_script="download_fastq_short.sh" # subsets only first 10k reads
     mincontiglen=100 #otherwise no contigs left, too few reads for 5000kb+ contigs
     EUK_PROFILES="/mnt/metaeuk_profiles_short/MMETSP_uniclust50_MERC_profiles_more_than1_few"
-
+    BATCH="batch_benchmark"
 
 # hardcoded parameters:
 mainfolder='/home/ubuntu/EukBook'
@@ -69,7 +75,7 @@ rule mc_copy:
     output:
         setn+"_copied" #checkpoint file
     shell:
-        "mc cp {input} eukupload/eukcontainer/batch1/; "
+        "mc cp {input} eukupload/eukcontainer/"+BATCH+"/; "
         "touch {output}; "
         #"rm -r "+ setn # DELETES the original folder
 
@@ -121,8 +127,23 @@ rule write_samples:
             for item in config["SAMPLE"]:
                 f.write("%s\n" % item)
     
+### rule to download Protein profiles for MetaEuk if absent
+# normally would be run only once with the very first snakemake launch on a new machine
+rule GET_METAEUK_PROTEIN_PROFILES:
+    output:
+        "/mnt/metaeuk_profiles/metaeuk_ref_more_than1_MMETSP_zenodo_3247846_profiles"
+    shell:
+        "wget http://wwwuser.gwdg.de/~elevyka/metaeuk_ref_more_than1_MMETSP_zenodo_3247846_profiles.tar.gz; "
+        "tar -C /mnt/metaeuk_profiles -xzf metaeuk_ref_more_than1_MMETSP_zenodo_3247846_profiles.tar.gz; "
+        "rm metaeuk_ref_more_than1_MMETSP_zenodo_3247846_profiles.tar.gz"
 
-
+rule GET_METAEUK_PROTEIN_PROFILES_short:
+    output:
+        directory("/mnt/metaeuk_profiles/MMETSP_uniclust50_MERC_profiles_more_than1_few")
+    shell:
+        "wget http://wwwuser.gwdg.de/~elevyka/metaeuk_ref_more_than1_MMETSP_zenodo_3247846_profiles.tar.gz; "
+        "tar -C /mnt/metaeuk_profiles -xzf metaeuk_ref_more_than1_MMETSP_zenodo_3247846_profiles.tar.gz; "
+        "rm metaeuk_ref_more_than1_MMETSP_zenodo_3247846_profiles.tar.gz"
 
 
 
