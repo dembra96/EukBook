@@ -53,7 +53,8 @@ masterInstance:
 # worker configuration
 workerInstances:
   - type: de.NBI highmem medium
-    image: 69e9eb13-9487-4bf9-9732-80114835d69b #Template snakemake 1 i
+    image: c66118a6-fc9c-4771-8709-d91d5eac1c72
+#    image: 69e9eb13-9487-4bf9-9732-80114835d69b #Template snakemake 1 i
     count: 2
 
 
