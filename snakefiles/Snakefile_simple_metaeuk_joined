@@ -20,7 +20,7 @@ benchmark=False
 if (benchmark==False):
     downloading_script="download_fastq.sh"
     mincontiglen=5000
-    EUK_PROFILES="/mnt/metaeuk_profiles/metaeuk_ref_profiles_more_than1_MMETSP_zenodo_3247846_profiles"
+    EUK_PROFILES="/mnt/metaeuk_profiles/metaeuk_ref_more_than1_MMETSP_zenodo_3247846_profiles"
     BATCH=BATCH
 else:
     downloading_script="download_fastq_short.sh" # subsets only first 10k reads
