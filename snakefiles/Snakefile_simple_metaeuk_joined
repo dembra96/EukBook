@@ -131,7 +131,7 @@ rule write_samples:
 # normally would be run only once with the very first snakemake launch on a new machine
 rule GET_METAEUK_PROTEIN_PROFILES:
     output:
-        "/mnt/metaeuk_profiles/metaeuk_ref_more_than1_MMETSP_zenodo_3247846_profiles"
+        "/mnt/metaeuk_profiles/metaeuk_ref_profiles_more_than1_MMETSP_zenodo_3247846_profiles"
     shell:
         "if mc cp --recursive eukupload/eukcontainer/metaeuk_profiles /mnt/ ; "
         "then echo 'Protein profiles successfully copied from eukcontainer mc copy.'; "
