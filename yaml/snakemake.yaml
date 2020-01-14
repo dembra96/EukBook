@@ -4,4 +4,5 @@ channels:
 dependencies:
   - bioconda::snakemake-minimal =5.9.1
   - graphviz =2.38.0
-
+  # package for Snakemake S3 remote fileserver access
+  - boto3

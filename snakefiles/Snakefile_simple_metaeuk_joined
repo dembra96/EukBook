@@ -2,6 +2,7 @@
 
 # Compared to Snakefile_simple here we wisely concatenate all EukRep contigs and running Metaeuk on all of them together. Should speed up.
 
+# IMPORTANT: ~/EukBook/MinIO_secret.sh must be sourced before Snakemake execution!
 
 ## Required config parameters:
 # SAMPLE - passed with config file by --configfile samples.yaml or --config SAMPLE=SRR2844600
@@ -31,6 +32,16 @@ else:
 # hardcoded parameters:
 mainfolder='/home/ubuntu/EukBook'
 maxthreads = snakemake.utils.available_cpu_count()
+
+
+# Attaching the remote MinIO S3 storage server
+# to make snakemake access remote files
+# IMPORTANT: ~/EukBook/MinIO_secret.sh must be sourced before Snakemake execution!
+import os
+from snakemake.remote.S3 import RemoteProvider as S3RemoteProvider
+S3 = S3RemoteProvider(host=os.environ["MINIO_HOST"], access_key_id=os.environ["MINIO_ID"], secret_access_key=os.environ["MINIO_SECRET"])
+
+
 
 # Handling different input ways of SAMPLESET config.
 # SAMPLESET should be passed with yaml config file alongside with sample accessions.
@@ -64,20 +75,13 @@ onerror:
 ### Workflow ###
 ################
 
-#rule all:
-#    input:
 
-rule mc_copy:
+rule all:
     input:
-        setn+".reports.tar.gz",
-        setn+".tar.gz",
-        setn+"_samples.txt",
-    output:
-        setn+"_copied" #checkpoint file
-    shell:
-        "mc cp {input} eukupload/eukcontainer/"+BATCH+"/; "
-        "touch {output}; "
-        #"rm -r "+ setn # DELETES the original folder
+        report = S3.remote("eukcontainer/"+BATCH+"/"+ setn+".reports.tar.gz"),
+        main_archive = S3.remote("eukcontainer/"+BATCH+"/"+ setn+".tar.gz"),
+        sample_list = S3.remote("eukcontainer/"+BATCH+"/"+ setn+"_samples.txt"),
+
 
 #compress all needed files
 rule tar:
@@ -111,8 +115,8 @@ rule tar:
 	metaeuk = [setn+"/MetaEuk_preds.fasta",
                    setn+"/MetaEuk_preds.fasta.headersMap.tsv"],
     output:
-        report = setn+".reports.tar.gz",
-        main = setn+".tar.gz"
+        report = S3.remote("eukcontainer/"+BATCH+"/"+ setn+".reports.tar.gz"),
+        main = S3.remote("eukcontainer/"+BATCH+"/"+ setn+".tar.gz"),
     shell:
         "tar -czf {output.report} {input.reports} & "
         "tar -czf {output.main} {input} {setn}/tempFolder/latest/{{contigs*,MetaEuk_preds.*}}"
