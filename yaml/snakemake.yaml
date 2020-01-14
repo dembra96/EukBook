@@ -6,3 +6,5 @@ dependencies:
   - graphviz =2.38.0
   # package for Snakemake S3 remote fileserver access
   - boto3
+  # fast parallel compression:
+  - pigz

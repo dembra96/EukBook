@@ -84,7 +84,7 @@ rule all:
 
 
 #compress all needed files
-rule tar:
+rule tar_big_archive:
     input: 
         ##REPORTS
         reports = [
@@ -115,17 +115,41 @@ rule tar:
 	metaeuk = [setn+"/MetaEuk_preds.fasta",
                    setn+"/MetaEuk_preds.fasta.headersMap.tsv"],
     output:
-        report = S3.remote("eukcontainer/"+BATCH+"/"+ setn+".reports.tar.gz"),
         main = S3.remote("eukcontainer/"+BATCH+"/"+ setn+".tar.gz"),
     shell:
-        "tar -czf {output.report} {input.reports} & "
-        "tar -czf {output.main} {input} {setn}/tempFolder/latest/{{contigs*,MetaEuk_preds.*}}"
-        #tars are executed in parrallel
+        "tar -cf {output.main} -I 'pigz -p 14' {input} {setn}/tempFolder/latest/{{contigs*,MetaEuk_preds.*}}"
+
+rule tar_reports:
+    input:
+        ##REPORTS
+        reports = [
+        #FastQC
+        expand(setn+"/{sample}/reads_{n}{trim}_fastqc.{ext}",
+               sample=config["SAMPLE"], n=["1","2"], trim=["","_trim"], ext=["html","zip"]),
+        #Fastp
+        expand(setn+"/{sample}/fastp.html", sample=config["SAMPLE"]),
+        expand(setn+"/{sample}/fastp.json", sample=config["SAMPLE"]),
+        #QUAST
+        setn+"/quast_multi_raw",
+        setn+"/quast_multi_filt_raw",
+        setn+"/quast_multi_EukRep",
+        #MultiQC
+        setn+"/multiqc_report.html",
+        setn+"/multiqc_data",
+        #logs
+        setn+"/log_MetaEuk_easypredict.txt",
+        expand(setn+"/{sample}/log_megahit.txt", sample=config["SAMPLE"]),
+        expand(setn+"/{sample}/log_EukRep.txt", sample=config["SAMPLE"])],
+    output:
+        report = S3.remote("eukcontainer/"+BATCH+"/"+ setn+".reports.tar.gz"),
+    shell:
+        "tar -czf {output.report} {input.reports}"
+
 
 #rule to save sample accessions provided in yaml as simple text list to copy to remote container.
 rule write_samples:
     output:
-        setn+"_samples.txt"
+        sample_list = S3.remote("eukcontainer/"+BATCH+"/"+ setn+"_samples.txt"),
     run:
         with open(output[0], 'w') as f:
             for item in config["SAMPLE"]:
