@@ -1,0 +1,47 @@
+# This example how to make a fork in snakemake, that looks if an archive of intermediate results is present at remote server. If it is present, download. If not - run a rule to produce new output and use this local output. 
+ 
+# The fork works with a function as input.
+# Rule step_after_megahit in its input has function get_megahit_source, that in the field "input:" puts either path to remote file, if it is present on remote server, or the local file, to trigger the rule to produce local file.
+
+  
+import os
+from snakemake.remote.S3 import RemoteProvider as S3RemoteProvider
+S3 = S3RemoteProvider(host=os.environ["MINIO_HOST"], access_key_id=os.environ["MINIO_ID"], secret_access_key=os.environ["MINIO_SECRET"])
+
+
+import subprocess
+
+def mc_ls(path="eukupload/", pattern=""):
+    mc_raw_output = str(subprocess.check_output(("mc ls "+ path + " | awk '{print $5}' | awk '/"+pattern+"/ {print}'"), shell=True))
+    mc_file_list = mc_raw_output.strip('b').strip("'").split("\\n")
+    print("MC_FILE_LIST: ", mc_file_list)
+    return mc_file_list
+
+def get_megahit_source(wildcards):
+    print("WILDCARDS: {wildcards.sample}".format(wildcards=wildcards))
+    already_calculated_megahits = mc_ls(path="eukupload/eukcontainer/megahit", pattern="contigs\.megahit\.fa\.tar\.gz$")
+    if "{wildcards.sample}.contigs.megahit.fa.tar.gz".format(wildcards=wildcards) in already_calculated_megahits:
+        output = S3.remote("eukcontainer/megahit/{wildcards.sample}.contigs.megahit.fa.tar.gz".format(wildcards=wildcards))
+    else:
+        output = "localfile.tar.gz"
+    return output
+
+
+rule all:
+    input:
+        "processed_SRR999999.contigs.megahit.fa.tar.gz"
+
+rule produce_new_megahit:
+    output:
+        "localfile.tar.gz"
+    shell:
+        "touch localfile.tar.gz"
+
+rule step_after_megahit:
+    input:
+        get_megahit_source
+    output:
+        "processed_{sample}.contigs.megahit.fa.tar.gz"
+    shell:
+        "echo myinput is {input}; "
+        "cp {input} {output}"

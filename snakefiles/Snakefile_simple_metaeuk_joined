@@ -12,7 +12,7 @@
 # that were already calculated for earlier batch. This is made to treat new versions
 # of pipeline separately and don`t override old results.
 BATCH="batch2" 
-
+megahit_version = "megahit_v1.2.9"
 ## Benchmarking mode?
 
 #benchmark=True
@@ -23,11 +23,13 @@ if (benchmark==False):
     mincontiglen=5000
     EUK_PROFILES="/mnt/metaeuk_profiles/metaeuk_ref_profiles_more_than1_MMETSP_zenodo_3247846_profiles"
     BATCH=BATCH
+    megahit_version=megahit_version
 else:
     downloading_script="download_fastq_short.sh" # subsets only first 10k reads
     mincontiglen=100 #otherwise no contigs left, too few reads for 5000kb+ contigs
     EUK_PROFILES="/mnt/metaeuk_profiles_short/MMETSP_uniclust50_MERC_profiles_more_than1_few"
     BATCH="batch_benchmark"
+    megahit_version="megahit_benchmark"
 
 # hardcoded parameters:
 mainfolder='/home/ubuntu/EukBook'
@@ -98,7 +100,7 @@ rule tar_big_archive:
         expand(setn+"/{sample}/fastp.html", sample=config["SAMPLE"]),
         expand(setn+"/{sample}/fastp.json", sample=config["SAMPLE"]),
         #QUAST
-        setn+"/quast_multi_raw",
+        #setn+"/quast_multi_raw",
         setn+"/quast_multi_filt_raw",
         setn+"/quast_multi_EukRep", 
         #MultiQC
@@ -106,12 +108,12 @@ rule tar_big_archive:
         setn+"/multiqc_data",
         #logs
         setn+"/log_MetaEuk_easypredict.txt",
-        expand(setn+"/{sample}/log_megahit.txt", sample=config["SAMPLE"]),
+        #expand(setn+"/{sample}/log_megahit.txt", sample=config["SAMPLE"]),
         expand(setn+"/{sample}/log_EukRep.txt", sample=config["SAMPLE"])],
         
         ## RESULTS
         #Megahit
-        megahit = expand(setn+"/{sample}/contigs.megahit.fa", sample=config["SAMPLE"]),
+        #megahit = expand(setn+"/{sample}/contigs.megahit.fa", sample=config["SAMPLE"]),
         #EukRep
         eukrep = expand(setn+"/{sample}/contigs.EukRep.fa", sample=config["SAMPLE"]),
         #MetaEuk
@@ -133,7 +135,7 @@ rule tar_reports:
         expand(setn+"/{sample}/fastp.html", sample=config["SAMPLE"]),
         expand(setn+"/{sample}/fastp.json", sample=config["SAMPLE"]),
         #QUAST
-        setn+"/quast_multi_raw",
+        #setn+"/quast_multi_raw",
         setn+"/quast_multi_filt_raw",
         setn+"/quast_multi_EukRep",
         #MultiQC
@@ -141,7 +143,7 @@ rule tar_reports:
         setn+"/multiqc_data",
         #logs
         setn+"/log_MetaEuk_easypredict.txt",
-        expand(setn+"/{sample}/log_megahit.txt", sample=config["SAMPLE"]),
+        #expand(setn+"/{sample}/log_megahit.txt", sample=config["SAMPLE"]),
         expand(setn+"/{sample}/log_EukRep.txt", sample=config["SAMPLE"])],
     output:
         report = S3.remote("eukcontainer/"+BATCH+"/"+ setn+".reports.tar.gz"),
@@ -247,11 +249,10 @@ rule megahit_unfiltered:
         setn+"/{sample}/reads_2_trim.fastq.gz"
     output:
         directory(setn+"/{sample}/megahit_unfiltered"), #{output[0]}
-        setn+"/{sample}/contigs.megahit.fa", #{output[1]}
-        S3.remote("eukcontainer/megahit/{sample}.contigs.megahit.fa.tar.gz"), #{output[2]}
-         
+        setn+"/{sample}/contigs.megahit.fa", #{output[1]} #need to explicitly write in tar operation
+        S3.remote("eukcontainer/contigs/"+megahit_version+"/{sample}.contigs.megahit.fa.tar.gz"), #{output[2]}
     log:
-        setn+"/{sample}/log_megahit.txt"
+        setn+"/{sample}/log_megahit.txt" #need to explicitly write in tar operation
     conda:
         mainfolder + "/yaml/megahit.yaml"
     threads: 7 
@@ -261,12 +262,47 @@ rule megahit_unfiltered:
         "touch {output[2]} ;" # IMPORTANT! A stamp to reserve the temp local folder so no finished meghit processes wil delete it before all others also finish. 
         "{{ time megahit -t 14 -1 {input[0]} -2 {input[1]} -o {output[0]} --min-contig-len 500; }} 2> {log}; "
         "cp {output[0]}/final.contigs.fa {output[1]}; " # copy results one folder up for proper QUAST labeling later
-        "tar -cf {output[2]} -I 'pigz' {output[1]} {log}; "
+        "tar -cf {output[2]} -I 'pigz' -C "+setn+" {wildcards.sample}/contigs.megahit.fa {wildcards.sample}/log_megahit.txt; "
         "touch {setn}/{wildcards.sample}/checkpoint_{wildcards.sample}_is_done.txt" 
+
+rule megahit_download:
+    input:
+        S3.remote("eukcontainer/contigs/"+megahit_version+"/{sample}.contigs.megahit.fa.tar.gz")
+    output:
+        setn+"/{sample}/downloaded_contigs.megahit.fa",
+    shell:
+        "mkdir -p {setn} ; "
+        "tar -xf {input} -C {setn} ; "
+        "mv {setn}/{wildcards.sample}/contigs.megahit.fa {output}"
+
+# Function to list files on remote server via MinIO client.
+#  Gives a python list of file names found in the path by pattern.
+import subprocess
+def mc_ls(path="eukupload/", pattern=""):
+    mc_raw_output = str(subprocess.check_output(("mc ls "+ path + " | awk '{print $5}' | awk '/"+pattern+"/ {print}'"), shell=True))
+    mc_file_list = mc_raw_output.strip('b').strip("'").split("\\n")
+    #print("MC_FILE_LIST: ", mc_file_list)
+    return mc_file_list
+
+# Input function to obtain megahit results
+def get_megahit_source(sample):
+    #sample = "{wildcards.sample}".format(wildcards=wildcards)
+    if (os.path.isfile(setn+"/%s/contigs.megahit.fa" % sample)):
+        print("Megahit %s assembly was found locally and will be used." % sample)
+        output = setn+"/%s/contigs.megahit.fa"%sample
+    else:
+        remote_megahits = mc_ls(path="eukupload/eukcontainer/contigs/"+megahit_version, pattern="contigs\.megahit\.fa\.tar\.gz$")
+        if ("%s.contigs.megahit.fa.tar.gz"%sample in remote_megahits):
+            print("Remote copy of Megahit assembly %s was found and will be downloaded." % sample)
+            output = setn+"/%s/downloaded_contigs.megahit.fa"%sample
+        else:
+            print("Atention! No Megahit assembly for %s was found on a remote server or in local folder, so it will be performed de novo." % sample)
+            output = setn+"/%s/contigs.megahit.fa"%sample
+    return output
 
 rule raw_contigs_size_filtering:
     input:
-        setn+"/{sample}/contigs.megahit.fa"
+        get_megahit_source
     output:
         setn+"/{sample}/contigs.megahit.sizefiltered.fa"
     shell:
@@ -274,7 +310,7 @@ rule raw_contigs_size_filtering:
         'awk \'BEGIN {{FS = "\\t" ; OFS = "\\n"}} {{header = $0 ; getline seq ; if (length(seq) >= '+str(mincontiglen)+') {{print header, seq}}}}\' < {input} > {output}; '
         #for fastq (but I have fasta):
         #'awk \'BEGIN {{FS = "\\t" ; OFS = "\\n"}} {{header = $0 ; getline seq ; getline qheader ; getline qseq ; if (length(seq) >= '+str(mincontiglen)+') {{print header, seq, qheader, qseq}}}}\' < {input} > {output}; '
-# ALWAYS escape { } \ by {{ }} \\ in snakemake, if you want to pass { } \ to a command, such as awk 
+## ALWAYS escape { } \ by {{ }} \\ in snakemake, if you want to pass { } \ to a command, such as awk 
 
 
 rule EukRep:
@@ -289,11 +325,11 @@ rule EukRep:
 
 # QUAST
 
-rule QUAST_multisample_raw_contigs:
+rule QUAST_raw_contigs:
     input:
-        expand("{setn}/{sample}/contigs.megahit.fa", sample=config["SAMPLE"],setn=setn)
+        get_megahit_source
     output:
-        directory(setn+"/quast_multi_raw")
+        directory(setn+"/quasts/quast_raw_{sample}")
     conda:
         mainfolder + "/yaml/quast.yaml"
     threads: 4
@@ -359,7 +395,8 @@ rule MetaEuk_easy_predict:
 rule MultiQC:
     input:
         expand(setn+"/{sample}/{file}", sample=config["SAMPLE"], file=['reads_1_fastqc.html', 'reads_2_fastqc.html', 'reads_1_trim_fastqc.html', 'reads_2_trim_fastqc.html', 'fastp.html']),
-        expand(setn+"/{file}", file=['quast_multi_raw', 'quast_multi_EukRep', 'quast_multi_filt_raw'])
+        expand(setn+"/quasts/quast_{stage}_{sample}", stage=["raw"], sample=config['SAMPLE']),
+        expand(setn+"/{file}", file=['quast_multi_EukRep', 'quast_multi_filt_raw'])
     output:
         setn+"/multiqc_report.html",
         directory(setn+"/multiqc_data")
