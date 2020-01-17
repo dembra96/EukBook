@@ -56,7 +56,8 @@ mainfolder='/home/ubuntu/EukBook'
 maxthreads = snakemake.utils.available_cpu_count()
 megahit_version = "megahit_v1.2.9" # Snakemake will create this remote folder for megahit results.
                                    # Prevents overwriting if different version of assembler is used.
-
+EukRep_version = "EukRep_v0.6.6"
+EukRep_mode = "lenient"
 # The batch number. (Will be deprecated) It is the subfolder in our remote MinIO container,
 # where the results are saved. A new batch makes new calculations for samples,
 # that were already calculated for earlier batch. This is made to treat new versions
@@ -182,7 +183,7 @@ def get_megahit_source(sample):
         print("Megahit %s assembly was found locally and will be used." % sample)
         output = setn+"/%s/contigs.megahit.fa"%sample
     else:
-        remote_megahits = mc_ls(path="eukupload/eukcontainer/contigs/"+megahit_version, pattern="contigs\.megahit\.fa\.tar\.gz$")
+        remote_megahits = mc_ls(path="eukupload/eukcontainer/contigs/"+megahit_version+"/megahit", pattern="contigs\.megahit\.fa\.tar\.gz$")
         if ("%s.contigs.megahit.fa.tar.gz"%sample in remote_megahits):
             print("Remote copy of Megahit assembly %s was found and will be downloaded." % sample)
             output = setn+"/%s/downloaded_contigs.megahit.fa"%sample
@@ -208,10 +209,10 @@ def get_megahit_source(sample):
 # Rule that determines required output of pipeline
 rule all:
     input:
-        report = S3.remote("eukcontainer/"+BATCH+"/"+ setn+".reports.tar.gz"),
-        main_archive = S3.remote("eukcontainer/"+BATCH+"/"+ setn+".tar.gz"),
-        sample_list = S3.remote("eukcontainer/"+BATCH+"/"+ setn+"_samples.txt"),
-
+        #report = S3.remote("eukcontainer/"+BATCH+"/"+ setn+".reports.tar.gz"),
+        #main_archive = S3.remote("eukcontainer/"+BATCH+"/"+ setn+".tar.gz"),
+        #sample_list = S3.remote("eukcontainer/"+BATCH+"/"+ setn+"_samples.txt"),
+        setn+"/MetaEuk_preds.fasta"
 
 
 #compress all needed files (will be deprecated)
@@ -379,7 +380,7 @@ rule megahit_unfiltered:
     output:
         directory(setn+"/{sample}/megahit_unfiltered"), #{output[0]}
         setn+"/{sample}/contigs.megahit.fa", #{output[1]} #need to explicitly write in tar operation
-        S3.remote("eukcontainer/contigs/"+megahit_version+"/{sample}.contigs.megahit.fa.tar.gz"), #{output[2]}
+        S3.remote("eukcontainer/contigs/"+megahit_version+"/megahit/{sample}.contigs.megahit.fa.tar.gz"), #{output[2]}
     log:
         setn+"/{sample}/log_megahit.txt" #need to explicitly write in tar operation
     conda:
@@ -399,7 +400,7 @@ rule megahit_unfiltered:
 # If the backup copies were detected on remote server, they will be used instaed of running new Megahit. 
 rule megahit_download:
     input:
-        S3.remote("eukcontainer/contigs/"+megahit_version+"/{sample}.contigs.megahit.fa.tar.gz")
+        S3.remote("eukcontainer/contigs/"+megahit_version+"/megahit/{sample}.contigs.megahit.fa.tar.gz")
     output:
         setn+"/{sample}/downloaded_contigs.megahit.fa",
     shell:
@@ -426,11 +427,16 @@ rule EukRep:
     input:
         setn+"/{sample}/contigs.megahit.sizefiltered.fa"
     output:
-        setn+"/{sample}/contigs.EukRep.fa"
+        setn+"/{sample}/contigs.EukRep.fa",
+        S3.remote("eukcontainer/contigs/"+megahit_version+"/"+EukRep_version+"_"+EukRep_mode+"/{sample}.contigs.EukRep.fa.tar.gz"), #{output[1]}
     log:
         setn+"/{sample}/log_EukRep.txt"
     shell:
-        "{{ time EukRep -i {input} -o {output} -m lenient --min "+str(mincontiglen)+"; }} 2> {log} ; "
+        "touch {output[1]} ; "
+        "{{ time EukRep -i {input} -o {output[0]} -m "+EukRep_mode+" --min "+str(mincontiglen)+"; }} 2> {log} ; "
+        "tar -cf {output[1]} -I 'pigz' -C " + setn + 
+        " {wildcards.sample}/contigs.EukRep.fa {wildcards.sample}/log_EukRep.txt "
+        " {wildcards.sample}/contigs.megahit.sizefiltered.fa"
 
 
 
@@ -475,13 +481,23 @@ rule QUAST_multisample_EukRep:
 
 
 # Concatenating all EukRep contigs
+#  Refers only to remote files, no fork here unfortunately.
 rule contig_concatenating:
     input:
-        expand("{setn}/{sample}/contigs.EukRep.fa", sample=config["SAMPLE"],setn=setn)
+        S3.remote(expand("eukcontainer/contigs/{megahit_version}/{EukRep_version}_{EukRep_mode}/{sample}.contigs.EukRep.fa.tar.gz",
+                         sample=config["SAMPLE"],
+                         setn=setn,
+                         megahit_version=megahit_version,
+                         EukRep_version=EukRep_version,
+                         EukRep_mode=EukRep_mode))
     output:
         setn+"/EukRep_contigs_renamed_cat.fasta"
     shell:
-        mainfolder + "/scripts/contig_rename_concat.sh {output} {input}" 
+        "mkdir -p {setn} ;"
+        "cat {input} > aggl_archive ; " 
+        "cat {input} | tar -xzivf - -C "+setn+ " ; " +
+        mainfolder + "/scripts/contig_rename_concat.sh {output} " + 
+        ' '.join(expand("{setn}/{sample}/contigs.EukRep.fa", setn=setn, sample=config['SAMPLE']))
 
 
 # MetaEuk 
