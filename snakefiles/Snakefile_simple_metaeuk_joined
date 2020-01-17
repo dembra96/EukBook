@@ -4,17 +4,68 @@
 
 # IMPORTANT: ~/EukBook/MinIO_secret.sh must be sourced before Snakemake execution!
 
-## Required config parameters:
-# SAMPLE - passed with config file by --configfile samples.yaml or --config SAMPLE=SRR2844600
-# SAMPLESET - for creating a subfolder dedicated to certain group of samples, listed in yaml file
-# The batch number. It is the subfolder in our remote MinIO container,
-# where our results are saved. A new batch makes new calculations for samples,
+
+
+
+
+
+############################################
+###                                      ###
+###             Configuration            ###
+###                                      ###
+############################################
+
+# Main arguments to the Megahit Snakemake pipeline must be passed with a config.
+
+#### Required input config parameters: ####
+# (must be passed with --configafile from yaml or json file, or in Snakemake command with --config)
+# (accessed in current snakefile with config['PARAMETER'])
+#
+#  * SAMPLE    - list of desired sample accessions to obtain MetaEuk predictions for.
+#  * SAMPLESET - unique name for the set of selected accesions. 
+#                Will be used to create a local subfolder and remote MetaEuk results folder.
+
+###  Example config usage
+#   snakemake [other arguments] --config SAMPLE=SRR2844600 SAMPLESET=set_07 
+#   snakemake [other arguments] --configfile path/to/configfile.yaml
+#       Example configfile.yaml:
+#            SAMPLESET:
+#               - set1
+#            SAMPLE:
+#               - SRR5918406
+#               - SRR5788362
+#               - SRR5788367
+#               - ...
+#
+#       NOTE: --config can pass only one string value for a parameter, e.g. only one sample.
+#             Passing multiple samples is possible only with config file. 
+#       NOTE: If both --config and --configfile are used and specify parameter with same name, 
+#             --config parameter will overwrite the one passed from --configfile.
+#             Parameters with different names will end up in final config independently 
+#             of way they were specified.
+
+
+
+
+
+
+
+
+####   Hardcoded parameters:           ####
+mainfolder='/home/ubuntu/EukBook'
+maxthreads = snakemake.utils.available_cpu_count()
+megahit_version = "megahit_v1.2.9" # Snakemake will create this remote folder for megahit results.
+                                   # Prevents overwriting if different version of assembler is used.
+
+# The batch number. (Will be deprecated) It is the subfolder in our remote MinIO container,
+# where the results are saved. A new batch makes new calculations for samples,
 # that were already calculated for earlier batch. This is made to treat new versions
 # of pipeline separately and don`t override old results.
 BATCH="batch2" 
-megahit_version = "megahit_v1.2.9"
-## Benchmarking mode?
 
+
+
+## Benchmarking mode?
 #benchmark=True
 benchmark=False
 
@@ -31,26 +82,43 @@ else:
     BATCH="batch_benchmark"
     megahit_version="megahit_benchmark"
 
-# hardcoded parameters:
-mainfolder='/home/ubuntu/EukBook'
-maxthreads = snakemake.utils.available_cpu_count()
 
 
-# Attaching the remote MinIO S3 storage server
-# to make snakemake access remote files
-# IMPORTANT: ~/EukBook/MinIO_secret.sh must be sourced before Snakemake execution!
+
+
+
+# Attaching the remote S3 server for storing pipeline results.
+# IMPORTANT: Global credential variables should be specified in bash environment 
+#            before running current Snakefile, for example by sourcing a script.
+#            Example script:
+#              MinIO_secret.sh
+#
+#           export MINIO_HOST="https://openstack.cebitec.uni-bielefeld.de:8080"
+#           export MINIO_ID="<secret-key-id>"
+#           export MINIO_SECRET="<secret-key>"
 import os
 from snakemake.remote.S3 import RemoteProvider as S3RemoteProvider
-S3 = S3RemoteProvider(host=os.environ["MINIO_HOST"], access_key_id=os.environ["MINIO_ID"], secret_access_key=os.environ["MINIO_SECRET"])
+S3 = S3RemoteProvider(host=os.environ["MINIO_HOST"],
+                      access_key_id=os.environ["MINIO_ID"],
+                      secret_access_key=os.environ["MINIO_SECRET"])
 
-ena = S3RemoteProvider(host="https://openstack.cebitec.uni-bielefeld.de:8080", access_key_id="", secret_access_key="")
+# de.nbi bielefeld container that stores a copy of metagenomes from ENA 
+ena = S3RemoteProvider(host="https://openstack.cebitec.uni-bielefeld.de:8080",
+                       access_key_id="",
+                       secret_access_key="")
 
 
-# Handling different input ways of SAMPLESET config.
-# SAMPLESET should be passed with yaml config file alongside with sample accessions.
-# Then it is an array of values, of which we have to take only the first argument  - [0].
-# But it can be overwritten with --config SAMPLESET=xxx parameter of snakemake command, if needed.
-# Then it is a string itself, not array. Applying [0] to string would return only its first character.
+
+
+
+
+
+#### Handling different input ways of SAMPLESET config. ####
+# Normally SAMPLESET should be passed with configfile together with corresponding accessions.
+#    In this case yaml always passes an array, even if only with one value.
+#    So, to obtain the actual sampleset string value, need to take first element of such array input.
+# But if the sampleset is explicitly specified with --config SAMPLESET="set_somethin",
+#   then it is already a string and if we are taking first element we will get only the first character.
 if type(config["SAMPLESET"]) is list:
     setn=config["SAMPLESET"][0]
 elif type(config["SAMPLESET"]) is str:
@@ -58,37 +126,95 @@ elif type(config["SAMPLESET"]) is str:
 
 
 
-# Email notifications
+
+
+
+
+####     Email notifications     ####
+targetmail="dembra96@gmail.com"
+
 onstart:
     if (benchmark==False):
         print("Workflow finished, no error")
-        shell("mail -s 'Snakemake "+setn+" - Workflow started' dembra96@gmail.com < {log}" )
+        shell("mail -s 'Snakemake "+setn+" - Workflow started' %s < {log}" % targetmail)
 
 onsuccess:
     if (benchmark==False):
         print("Workflow finished, no error")
-        shell("mail -s 'Snakemake "+setn+" - Workflow successfully finished' dembra96@gmail.com < {log}")
+        shell("mail -s 'Snakemake "+setn+" - Workflow successfully finished' %s < {log}" % targetmail)
 
 onerror:
     if (benchmark==False):
         print("An error occurred")
-        shell("mail -s 'Snakemake "+setn+" - an error occurred' dembra96@gmail.com < {log}")
+        shell("mail -s 'Snakemake "+setn+" - an error occurred' %s < {log}" % targetmail)
 
 
 
 
-################
-### Workflow ###
-################
 
 
+
+
+############################################
+###                                      ###
+###           Input functions            ###
+###                                      ###
+############################################
+
+# Helper function to list files on remote server via MinIO client.
+#  Gives a python list of file names found in the path by pattern.
+import subprocess
+
+def mc_ls(path="eukupload/", pattern=""):
+    mc_raw_output = str(subprocess.check_output(
+                             ("mc ls "+path+" | " + 
+                              "awk '{print $5}' | " + 
+                              "awk '/"+pattern+"/ {print}'"),
+                                                shell=True)
+                       )
+    mc_file_list = mc_raw_output.strip('b').strip("'").split("\\n")
+    return mc_file_list
+
+# Input function to obtain megahit results
+def get_megahit_source(sample):
+    #sample = "{wildcards.sample}".format(wildcards=wildcards)
+    if (os.path.isfile(setn+"/%s/contigs.megahit.fa" % sample)):
+        print("Megahit %s assembly was found locally and will be used." % sample)
+        output = setn+"/%s/contigs.megahit.fa"%sample
+    else:
+        remote_megahits = mc_ls(path="eukupload/eukcontainer/contigs/"+megahit_version, pattern="contigs\.megahit\.fa\.tar\.gz$")
+        if ("%s.contigs.megahit.fa.tar.gz"%sample in remote_megahits):
+            print("Remote copy of Megahit assembly %s was found and will be downloaded." % sample)
+            output = setn+"/%s/downloaded_contigs.megahit.fa"%sample
+        else:
+            print("Atention! No Megahit assembly for %s was found on a remote server or in local folder, so it will be performed de novo." % sample)
+            output = setn+"/%s/contigs.megahit.fa"%sample
+    return output
+
+
+
+
+
+
+
+
+############################################
+###                                      ###
+###               Workflow               ###
+###                                      ###
+############################################
+
+
+# Rule that determines required output of pipeline
 rule all:
     input:
         report = S3.remote("eukcontainer/"+BATCH+"/"+ setn+".reports.tar.gz"),
         main_archive = S3.remote("eukcontainer/"+BATCH+"/"+ setn+".tar.gz"),
         sample_list = S3.remote("eukcontainer/"+BATCH+"/"+ setn+"_samples.txt"),
 
-#compress all needed files
+
+
+#compress all needed files (will be deprecated)
 rule tar_big_archive:
     input: 
         ##REPORTS
@@ -124,7 +250,7 @@ rule tar_big_archive:
     shell:
         "tar -cf {output.main} -I 'pigz -p 14' {input} {setn}/tempFolder/latest/{{contigs*,MetaEuk_preds.*}}"
 
-rule tar_reports:
+rule tar_reports: #(will be deprecated)
     input:
         ##REPORTS
         reports = [
@@ -151,6 +277,7 @@ rule tar_reports:
         "tar -czf {output.report} {input.reports}"
 
 
+
 #rule to save sample accessions provided in yaml as simple text list to copy to remote container.
 rule write_samples:
     output:
@@ -159,6 +286,8 @@ rule write_samples:
         with open(output[0], 'w') as f:
             for item in config["SAMPLE"]:
                 f.write("%s\n" % item)
+
+
     
 ### rule to download Protein profiles for MetaEuk if absent
 # normally would be run only once with the very first snakemake launch on a new machine
@@ -255,16 +384,19 @@ rule megahit_unfiltered:
         setn+"/{sample}/log_megahit.txt" #need to explicitly write in tar operation
     conda:
         mainfolder + "/yaml/megahit.yaml"
-    threads: 7 
-#this will allow two megahits run in parallell and make sure all cores are 100% busy al the time, because with single megahit on all cores they are ~75% occupied on average.
+    threads: 7 #But for Megahit I specify -t 14 .
+               # This will allow two megahits run in parallell and make sure all cores are 100% busy all the time, 
+               # because with single megahit on all cores they are ~75% occupied on average.
     shell:
-        #"rm -r "+setn+"/{wildcards.sample}/megahit_unfiltered; "
-        "touch {output[2]} ;" # IMPORTANT! A stamp to reserve the temp local folder so no finished meghit processes wil delete it before all others also finish. 
+        "touch {output[2]} ; " # IMPORTANT! A stamp to reserve the temp local folder,
+                              # so no finished meghit processes wil delete it before all others also finish. 
         "{{ time megahit -t 14 -1 {input[0]} -2 {input[1]} -o {output[0]} --min-contig-len 500; }} 2> {log}; "
         "cp {output[0]}/final.contigs.fa {output[1]}; " # copy results one folder up for proper QUAST labeling later
         "tar -cf {output[2]} -I 'pigz' -C "+setn+" {wildcards.sample}/contigs.megahit.fa {wildcards.sample}/log_megahit.txt; "
         "touch {setn}/{wildcards.sample}/checkpoint_{wildcards.sample}_is_done.txt" 
 
+
+# If the backup copies were detected on remote server, they will be used instaed of running new Megahit. 
 rule megahit_download:
     input:
         S3.remote("eukcontainer/contigs/"+megahit_version+"/{sample}.contigs.megahit.fa.tar.gz")
@@ -275,30 +407,7 @@ rule megahit_download:
         "tar -xf {input} -C {setn} ; "
         "mv {setn}/{wildcards.sample}/contigs.megahit.fa {output}"
 
-# Function to list files on remote server via MinIO client.
-#  Gives a python list of file names found in the path by pattern.
-import subprocess
-def mc_ls(path="eukupload/", pattern=""):
-    mc_raw_output = str(subprocess.check_output(("mc ls "+ path + " | awk '{print $5}' | awk '/"+pattern+"/ {print}'"), shell=True))
-    mc_file_list = mc_raw_output.strip('b').strip("'").split("\\n")
-    #print("MC_FILE_LIST: ", mc_file_list)
-    return mc_file_list
 
-# Input function to obtain megahit results
-def get_megahit_source(sample):
-    #sample = "{wildcards.sample}".format(wildcards=wildcards)
-    if (os.path.isfile(setn+"/%s/contigs.megahit.fa" % sample)):
-        print("Megahit %s assembly was found locally and will be used." % sample)
-        output = setn+"/%s/contigs.megahit.fa"%sample
-    else:
-        remote_megahits = mc_ls(path="eukupload/eukcontainer/contigs/"+megahit_version, pattern="contigs\.megahit\.fa\.tar\.gz$")
-        if ("%s.contigs.megahit.fa.tar.gz"%sample in remote_megahits):
-            print("Remote copy of Megahit assembly %s was found and will be downloaded." % sample)
-            output = setn+"/%s/downloaded_contigs.megahit.fa"%sample
-        else:
-            print("Atention! No Megahit assembly for %s was found on a remote server or in local folder, so it will be performed de novo." % sample)
-            output = setn+"/%s/contigs.megahit.fa"%sample
-    return output
 
 rule raw_contigs_size_filtering:
     input:
@@ -306,11 +415,11 @@ rule raw_contigs_size_filtering:
     output:
         setn+"/{sample}/contigs.megahit.sizefiltered.fa"
     shell:
-        #for fasta:
-        'awk \'BEGIN {{FS = "\\t" ; OFS = "\\n"}} {{header = $0 ; getline seq ; if (length(seq) >= '+str(mincontiglen)+') {{print header, seq}}}}\' < {input} > {output}; '
-        #for fastq (but I have fasta):
-        #'awk \'BEGIN {{FS = "\\t" ; OFS = "\\n"}} {{header = $0 ; getline seq ; getline qheader ; getline qseq ; if (length(seq) >= '+str(mincontiglen)+') {{print header, seq, qheader, qseq}}}}\' < {input} > {output}; '
+        'awk \'BEGIN {{FS = "\\t" ; OFS = "\\n"}} {{header = $0 ; getline seq ; '
+        'if (length(seq) >= '+str(mincontiglen)+') {{print header, seq}}}}\' < {input} > {output}; '
 ## ALWAYS escape { } \ by {{ }} \\ in snakemake, if you want to pass { } \ to a command, such as awk 
+
+
 
 
 rule EukRep:
@@ -322,6 +431,9 @@ rule EukRep:
         setn+"/{sample}/log_EukRep.txt"
     shell:
         "{{ time EukRep -i {input} -o {output} -m lenient --min "+str(mincontiglen)+"; }} 2> {log} ; "
+
+
+
 
 # QUAST
 
@@ -380,11 +492,11 @@ rule MetaEuk_easy_predict:
     output:
         setn+"/MetaEuk_preds.fasta",        #{output[0]}
         directory(setn+"/tempFolder"), #{output[1]}
-        setn+"/MetaEuk_preds.fasta.headersMap.tsv", #just need to indicate it here so tar ruleknows where to find it. no need to specify it in metaeuk command.
+        setn+"/MetaEuk_preds.fasta.headersMap.tsv", #just need to indicate it here so tar rule knows where to find it. 
+                                                    #no need to specify it in metaeuk command.
     log:
         setn+"/log_MetaEuk_easypredict.txt"
     threads: maxthreads
-    resources: mem_mb=120000
     shell:
         "{{ time metaeuk easy-predict {input[0]} {input[1]} {output[0]} {output[1]}"
         " --metaeuk-eval 0.0001 -e 100 --slice-search --min-ungapped-score 35"
