@@ -58,6 +58,10 @@ megahit_version = "megahit_v1.2.9" # Snakemake will create this remote folder fo
                                    # Prevents overwriting if different version of assembler is used.
 EukRep_version = "EukRep_v0.6.6"
 EukRep_mode = "lenient"
+MetaEuk_version = "MetaEuk_alpha"
+MetaEuk_reference = "metaeuk_ref_profiles_more_than1_MMETSP_zenodo_3247846_profiles"
+
+
 # The batch number. (Will be deprecated) It is the subfolder in our remote MinIO container,
 # where the results are saved. A new batch makes new calculations for samples,
 # that were already calculated for earlier batch. This is made to treat new versions
@@ -66,23 +70,40 @@ BATCH="batch2"
 
 
 
+## Handling different input ways of SAMPLESET config. ##
+# Normally SAMPLESET should be passed with configfile together with corresponding accessions.
+#    In this case yaml always passes an array, even if only with one value.
+#    So, to obtain the actual sampleset string value, need to take first element of such array input.
+# But if the sampleset is explicitly specified with --config SAMPLESET="set_somethin",
+#   then it is already a string and if we are taking first element we will get only the first character.
+if type(config["SAMPLESET"]) is list:
+    setn=config["SAMPLESET"][0]
+elif type(config["SAMPLESET"]) is str:
+    setn=config["SAMPLESET"]
+
+
+
+
 ## Benchmarking mode?
 #benchmark=True
 benchmark=False
 
+
+#### Benchmark: Changing Snakemake behavior to run through using micro-subsetted files ####
 if (benchmark==False):
     downloading_script="download_fastq.sh"
     mincontiglen=5000
-    EUK_PROFILES="/mnt/metaeuk_profiles/metaeuk_ref_profiles_more_than1_MMETSP_zenodo_3247846_profiles"
+    EUK_PROFILES="/mnt/metaeuk_profiles/"+ MetaEuk_reference
     BATCH=BATCH
     megahit_version=megahit_version
+    setn=setn
 else:
     downloading_script="download_fastq_short.sh" # subsets only first 10k reads
     mincontiglen=100 #otherwise no contigs left, too few reads for 5000kb+ contigs
     EUK_PROFILES="/mnt/metaeuk_profiles_short/MMETSP_uniclust50_MERC_profiles_more_than1_few"
     BATCH="batch_benchmark"
     megahit_version="megahit_benchmark"
-
+    setn=setn+"_bench"
 
 
 
@@ -107,23 +128,6 @@ S3 = S3RemoteProvider(host=os.environ["MINIO_HOST"],
 ena = S3RemoteProvider(host="https://openstack.cebitec.uni-bielefeld.de:8080",
                        access_key_id="",
                        secret_access_key="")
-
-
-
-
-
-
-
-#### Handling different input ways of SAMPLESET config. ####
-# Normally SAMPLESET should be passed with configfile together with corresponding accessions.
-#    In this case yaml always passes an array, even if only with one value.
-#    So, to obtain the actual sampleset string value, need to take first element of such array input.
-# But if the sampleset is explicitly specified with --config SAMPLESET="set_somethin",
-#   then it is already a string and if we are taking first element we will get only the first character.
-if type(config["SAMPLESET"]) is list:
-    setn=config["SAMPLESET"][0]
-elif type(config["SAMPLESET"]) is str:
-    setn=config["SAMPLESET"]
 
 
 
@@ -210,10 +214,10 @@ def get_megahit_source(sample):
 rule all:
     input:
         #report = S3.remote("eukcontainer/"+BATCH+"/"+ setn+".reports.tar.gz"),
-        #main_archive = S3.remote("eukcontainer/"+BATCH+"/"+ setn+".tar.gz"),
+        #S3.remote("eukcontainer/"+BATCH+"/"+ setn+".tar.gz"),
         #sample_list = S3.remote("eukcontainer/"+BATCH+"/"+ setn+"_samples.txt"),
-        setn+"/MetaEuk_preds.fasta"
-
+        setn+"/MetaEuk_preds.fasta",
+        #S3.remote("eukcontainer/contigs/"+megahit_version+"/"+EukRep_version+"_"+EukRep_mode+"/"+MetaEuk_version+"/"+MetaEuk_reference+"/"+setn+"_MetaEuk_preds.fasta.tar.gz"),
 
 #compress all needed files (will be deprecated)
 rule tar_big_archive:
@@ -428,7 +432,7 @@ rule EukRep:
         setn+"/{sample}/contigs.megahit.sizefiltered.fa"
     output:
         setn+"/{sample}/contigs.EukRep.fa",
-        S3.remote("eukcontainer/contigs/"+megahit_version+"/"+EukRep_version+"_"+EukRep_mode+"/{sample}.contigs.EukRep.fa.tar.gz"), #{output[1]}
+        S3.remote("eukcontainer/contigs/"+megahit_version+"/"+EukRep_version+"_"+EukRep_mode+"/eukrep/{sample}.contigs.EukRep.fa.tar.gz"), #{output[1]}
     log:
         setn+"/{sample}/log_EukRep.txt"
     shell:
@@ -484,7 +488,7 @@ rule QUAST_multisample_EukRep:
 #  Refers only to remote files, no fork here unfortunately.
 rule contig_concatenating:
     input:
-        S3.remote(expand("eukcontainer/contigs/{megahit_version}/{EukRep_version}_{EukRep_mode}/{sample}.contigs.EukRep.fa.tar.gz",
+        S3.remote(expand("eukcontainer/contigs/{megahit_version}/{EukRep_version}_{EukRep_mode}/eukrep/{sample}.contigs.EukRep.fa.tar.gz",
                          sample=config["SAMPLE"],
                          setn=setn,
                          megahit_version=megahit_version,
@@ -510,13 +514,20 @@ rule MetaEuk_easy_predict:
         directory(setn+"/tempFolder"), #{output[1]}
         setn+"/MetaEuk_preds.fasta.headersMap.tsv", #just need to indicate it here so tar rule knows where to find it. 
                                                     #no need to specify it in metaeuk command.
+        S3.remote("eukcontainer/contigs/"+megahit_version+"/"+EukRep_version+"_"+EukRep_mode+"/"+MetaEuk_version+"/"+MetaEuk_reference+"/"+setn+"_MetaEuk_preds.fasta.tar.gz"), #{output[3]}
     log:
         setn+"/log_MetaEuk_easypredict.txt"
     threads: maxthreads
     shell:
         "{{ time metaeuk easy-predict {input[0]} {input[1]} {output[0]} {output[1]}"
         " --metaeuk-eval 0.0001 -e 100 --slice-search --min-ungapped-score 35"
-        " --min-length 40 --min-exon-aa 20 --metaeuk-tcov 0.6; }} > {log} 2>&1"
+        " --min-length 40 --min-exon-aa 20 --metaeuk-tcov 0.6; }} > {log} 2>&1 ; "
+        " cd "+setn+" ; " # had to cd because tar doesn't handle * when -C is specified
+        "tar -cf ../{output[3]} -I 'pigz' "
+        " MetaEuk_preds.fasta MetaEuk_preds.fasta.headersMap.tsv "
+        " tempFolder/latest/{{contigs*,MetaEuk_preds.*}} "
+        " log_MetaEuk_easypredict.txt ; "
+        " cd .."
 
 
 # MultiQC
