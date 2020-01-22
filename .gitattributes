@@ -1,1 +1,1 @@
-Snakefile linguist-language=Python
+snakefiles/Snakefile* linguist-language=Python
