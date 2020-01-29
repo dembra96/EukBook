@@ -218,6 +218,7 @@ rule all:
         #sample_list = S3.remote("eukcontainer/"+BATCH+"/"+ setn+"_samples.txt"),
         setn+"/MetaEuk_preds.fasta",
         #S3.remote("eukcontainer/contigs/"+megahit_version+"/"+EukRep_version+"_"+EukRep_mode+"/"+MetaEuk_version+"/"+MetaEuk_reference+"/"+setn+"_MetaEuk_preds.fasta.tar.gz"),
+        S3.remote(expand("eukcontainer/contigs/"+megahit_version+"/preprocessing_reports/{sample}.reports.tar.gz", sample=config["SAMPLE"])),
 
 #compress all needed files (will be deprecated)
 rule tar_big_archive:
@@ -373,6 +374,22 @@ rule FastQC_trimmed:
         "fastqc -t {threads} {input} "
 
 
+rule upload_preprocessing_reports:
+    input:
+       fastqc1 = expand(setn+"/{{sample}}/reads_{n}_fastqc.{ext}", n=["1","2"], ext=["html","zip"]),
+       fastp = [setn+"/{sample}/reads_1_trim.fastq.gz",
+                setn+"/{sample}/reads_2_trim.fastq.gz",
+                setn+"/{sample}/fastp.json",
+                setn+"/{sample}/fastp.html"],
+       fsatqc2 = expand(setn+"/{{sample}}/reads_{n}_trim_fastqc.{ext}", n=["1","2"], ext=["html","zip"]),
+    output:
+       S3.remote("eukcontainer/contigs/"+megahit_version+"/preprocessing_reports/{sample}.reports.tar.gz")
+    threads: 1
+    shell:
+        "mkdir -p tmp_reports_{wildcards.sample}/{wildcards.sample} ; "
+        "cp {input} tmp_reports_{wildcards.sample}/{wildcards.sample}/ ; "
+        "tar -czf {output} -C tmp_reports_{wildcards.sample} $(ls tmp_reports_{wildcards.sample}/) ; "
+        "rm -r tmp_reports_{wildcards.sample} ; "
 
 
 ### Assembly without filtering

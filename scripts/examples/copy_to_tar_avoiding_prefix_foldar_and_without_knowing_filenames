@@ -1,0 +1,36 @@
+rule upload_preprocessing_reports:
+    input:
+       fastqc1 = expand(setn+"/{{sample}}/reads_{n}_fastqc.{ext}", n=["1","2"], ext=["html","zip"]),
+       fastp = [setn+"/{sample}/reads_1_trim.fastq.gz",
+                setn+"/{sample}/reads_2_trim.fastq.gz",
+                setn+"/{sample}/fastp.json",
+                setn+"/{sample}/fastp.html"],
+       fsatqc2 = expand(setn+"/{{sample}}/reads_{n}_trim_fastqc.{ext}", n=["1","2"], ext=["html","zip"]),
+    output:
+       S3.remote("eukcontainer/contigs/"+megahit_version+"/preprocessing_reports/{sample}.reports.tar.gz")
+    threads: 1
+    shell:
+        "mkdir -p tmp_{wildcards.sample}/{wildcards.sample} ; "
+        "cp {input} tmp_{wildcards.sample}/{wildcards.sample}/ ; "
+        "tar -czf {output} -C tmp_{wildcards.sample} $(ls tmp_{wildcards.sample}/) ; "
+        "rm -r tmp_{wildcards.sample};"
+
+
+# tar remembers the older hierarchy of specified files and compresses them in same topology.
+# If you don't know all the files and want to specify them with wildcard - you can do it with * .
+# Bash will simply substitute * with appropriate files.
+
+# If you need to avoid the highermost folder(s) in tarfile hierarchy, you can specify the prefix to 
+# tar with -C $folder  and then list the files without $folder/... before them.
+
+# Another solution is to cd to folder, tar it, and go back, but this doesn't allow to pass all 
+# files as snaemake {input}, because they are specified with preceding $folder/ thing.
+
+# But both things - avoid parent folder and also specify files with * - don't work simultaneously.
+# Bash can no longer expand the asterisc when files are specified not properly from head directory.
+# The solution is to use -C $folder and pass files from ls output:
+#    tar -czf file.tar.gz -C $folder $(ls $folder/)
+
+# In the example above I have to avoid the set name, that I don't want in my tar, and also I don't know in advance
+# For this I copy needed report files from main sample dir into temp dir, 
+# tar them when I precisely know they hierarchy, and delete temp dir.
