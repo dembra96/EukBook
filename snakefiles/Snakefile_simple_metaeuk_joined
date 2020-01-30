@@ -435,13 +435,20 @@ rule megahit_download:
 
 rule raw_contigs_size_filtering:
     input:
-        get_megahit_source
+        #get_megahit_source
+        S3.remote("eukcontainer/contigs/"+megahit_version+"/megahit/{sample}.contigs.megahit.fa.tar.gz"),
     output:
-        setn+"/{sample}/contigs.megahit.sizefiltered.fa"
+        setn+"/{sample}/contigs.megahit.fa",             # {output[0]}
+        setn+"/{sample}/contigs.megahit.sizefiltered.fa", # {output[1]}
     shell:
+        #unpack megahit contigs tar
+        "mkdir -p {setn} ; "
+        "tar -xf {input} -C {setn} ; " #will give {output[0]}
+
+        # Run sizefiltering
         'awk \'BEGIN {{FS = "\\t" ; OFS = "\\n"}} {{header = $0 ; getline seq ; '
-        'if (length(seq) >= '+str(mincontiglen)+') {{print header, seq}}}}\' < {input} > {output}; '
-## ALWAYS escape { } \ by {{ }} \\ in snakemake, if you want to pass { } \ to a command, such as awk 
+        'if (length(seq) >= '+str(mincontiglen)+') {{print header, seq}}}}\' < {output[0]} > {output[1]}; '
+        ## ALWAYS escape { } \ by {{ }} \\ in snakemake, if you want to pass { } \ to a command, such as awk
 
 
 
@@ -468,20 +475,29 @@ rule EukRep:
 
 rule QUAST_raw_contigs:
     input:
-        get_megahit_source
+        #get_megahit_source
+        S3.remote("eukcontainer/contigs/"+megahit_version+"/megahit/{sample}.contigs.megahit.fa.tar.gz"),
     output:
-        directory(setn+"/quasts/quast_raw_{sample}"),
-        S3.remote("eukcontainer/contigs/"+megahit_version+"/QUAST_raw_contigs/{sample}.quast.raw.tar.gz"),
+        setn+"/{sample}/contigs.megahit.fa",            # {output[0]}
+        directory(setn+"/quasts/quast_raw_{sample}"),   # {output[1]}
+        S3.remote("eukcontainer/contigs/"+megahit_version+"/QUAST_raw_contigs/{sample}.quast.raw.tar.gz"), # {output[2]}
     conda:
         mainfolder + "/yaml/quast.yaml"
     threads: 1
     shell:
+        #unpack megahit contigs tar
+        "mkdir -p {setn} ; "
+        "tar -xf {input} -C {setn} ; " #will give {output[0]}
+
+        # Run QUAST
         #"time quast -t {threads} --silent -o {output} {input}"
-        "quast -t {threads} --silent --min-contig "+str(mincontiglen)+" -o {output[0]} {input} ; "
+        "quast -t {threads} --silent --min-contig "+str(mincontiglen)+" -o {output[1]} {output[0]} ; "
+        
+        # Pack QUAST results
         # some manipulations to avoid having files under "set_x" folder in tar file:
         "mkdir -p tmp_quast_raw_{wildcards.sample}/quasts ; "
-        "cp -r {output[0]} tmp_quast_raw_{wildcards.sample}/quasts/ ; "
-        "tar -czf {output[1]} -C tmp_quast_raw_{wildcards.sample} $(ls tmp_quast_raw_{wildcards.sample}/) ; "
+        "cp -r {output[1]} tmp_quast_raw_{wildcards.sample}/quasts/ ; "
+        "tar -czf {output[2]} -C tmp_quast_raw_{wildcards.sample} $(ls tmp_quast_raw_{wildcards.sample}/) ; "
         "rm -r tmp_quast_raw_{wildcards.sample} ; "
 
 rule QUAST_multisample_raw_contigs_sizefiltered:
