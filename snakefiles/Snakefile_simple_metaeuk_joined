@@ -403,7 +403,6 @@ rule megahit_unfiltered:
     output:
         directory(setn+"/{sample}/megahit_unfiltered"), #{output[0]}
         setn+"/{sample}/contigs.megahit.fa", #{output[1]} #need to explicitly write in tar operation
-        S3.remote("eukcontainer/contigs/"+megahit_version+"/megahit/{sample}.contigs.megahit.fa.tar.gz"), #{output[2]}
     log:
         setn+"/{sample}/log_megahit.txt" #need to explicitly write in tar operation
     conda:
@@ -412,12 +411,25 @@ rule megahit_unfiltered:
                # This will allow two megahits run in parallell and make sure all cores are 100% busy all the time, 
                # because with single megahit on all cores they are ~75% occupied on average.
     shell:
-        "touch {output[2]} ; " # IMPORTANT! A stamp to reserve the temp local folder,
-                              # so no finished meghit processes wil delete it before all others also finish. 
         "{{ time megahit -t 14 -1 {input[0]} -2 {input[1]} -o {output[0]} --min-contig-len 500; }} 2> {log}; "
         "cp {output[0]}/final.contigs.fa {output[1]}; " # copy results one folder up for proper QUAST labeling later
         "tar -cf {output[2]} -I 'pigz' -C "+setn+" {wildcards.sample}/contigs.megahit.fa {wildcards.sample}/log_megahit.txt; "
-        "touch {setn}/{wildcards.sample}/checkpoint_{wildcards.sample}_is_done.txt" 
+
+rule megahit_upload:
+    input:
+        setn+"/{sample}/contigs.megahit.fa", #{output[1]} #need to explicitly write in tar operation
+        setn+"/{sample}/log_megahit.txt",
+    output:
+        S3.remote("eukcontainer/contigs/"+megahit_version+"/megahit/{sample}.contigs.megahit.fa.tar.gz"), #{output[2]}
+    shell:
+        "touch {output} ; " # IMPORTANT! A stamp to reserve the temp local folder,
+                            # so no finished tarring processes will delete it before all other tars also finish. 
+        "tar -cf {output} -I 'pigz' -C "+setn+" {wildcards.sample}/contigs.megahit.fa {wildcards.sample}/log_megahit.txt; "
+
+
+
+
+
 
 
 # If the backup copies were detected on remote server, they will be used instaed of running new Megahit. 
@@ -477,28 +489,30 @@ rule QUAST_raw_contigs:
     input:
         #get_megahit_source
         S3.remote("eukcontainer/contigs/"+megahit_version+"/megahit/{sample}.contigs.megahit.fa.tar.gz"),
+    params:
+        contigs=setn+"/{sample}/contigs.megahit.fa", # intermediate file
+        tmp="tmp_quast_raw_{sample}",                # temporary folder
     output:
-        setn+"/{sample}/contigs.megahit.fa",            # {output[0]}
-        directory(setn+"/quasts/quast_raw_{sample}"),   # {output[1]}
-        S3.remote("eukcontainer/contigs/"+megahit_version+"/QUAST_raw_contigs/{sample}.quast.raw.tar.gz"), # {output[2]}
+        directory(setn+"/quasts/quast_raw_{sample}"),   # {output[0]}
+        S3.remote("eukcontainer/contigs/"+megahit_version+"/QUAST_raw_contigs/{sample}.quast.raw.tar.gz"), # {output[1]}
     conda:
         mainfolder + "/yaml/quast.yaml"
     threads: 1
     shell:
         #unpack megahit contigs tar
         "mkdir -p {setn} ; "
-        "tar -xf {input} -C {setn} ; " #will give {output[0]}
+        "tar -xf {input} -C {setn} ; " # will give intermediate file
 
         # Run QUAST
         #"time quast -t {threads} --silent -o {output} {input}"
-        "quast -t {threads} --silent --min-contig "+str(mincontiglen)+" -o {output[1]} {output[0]} ; "
+        "quast -t {threads} --silent --min-contig "+str(mincontiglen)+" -o {output[0]} {params.contigs} ; "
         
         # Pack QUAST results
         # some manipulations to avoid having files under "set_x" folder in tar file:
-        "mkdir -p tmp_quast_raw_{wildcards.sample}/quasts ; "
-        "cp -r {output[1]} tmp_quast_raw_{wildcards.sample}/quasts/ ; "
-        "tar -czf {output[2]} -C tmp_quast_raw_{wildcards.sample} $(ls tmp_quast_raw_{wildcards.sample}/) ; "
-        "rm -r tmp_quast_raw_{wildcards.sample} ; "
+        "mkdir -p {params.tmp}/quasts ; "
+        "cp -r {output[0]} {params.tmp}/quasts/ ; "
+        "tar -czf {output[1]} -C {params.tmp} $(ls {params.tmp}/) ; "
+        "rm -r {params.tmp} ; "
 
 rule QUAST_multisample_raw_contigs_sizefiltered:
     input:
