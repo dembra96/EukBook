@@ -50,8 +50,10 @@
 
 
 
+############################
+##  Hardcoded parameters  ##
+############################
 
-####   Hardcoded parameters:           ####
 mainfolder='/home/ubuntu/EukBook'
 maxthreads = snakemake.utils.available_cpu_count()
 megahit_version = "megahit_v1.2.9" # Snakemake will create this remote folder for megahit results.
@@ -61,12 +63,6 @@ EukRep_mode = "lenient"
 MetaEuk_version = "MetaEuk_alpha"
 MetaEuk_reference = "metaeuk_ref_profiles_more_than1_MMETSP_zenodo_3247846_profiles"
 
-
-# The batch number. (Will be deprecated) It is the subfolder in our remote MinIO container,
-# where the results are saved. A new batch makes new calculations for samples,
-# that were already calculated for earlier batch. This is made to treat new versions
-# of pipeline separately and don`t override old results.
-BATCH="batch2" 
 
 
 
@@ -83,31 +79,32 @@ elif type(config["SAMPLESET"]) is str:
 
 
 
+###########################
+##      Quick mode?      ##
+###########################
+#Quick=True
+Quick=False
 
-## Benchmarking mode?
-#benchmark=True
-benchmark=False
 
-
-#### Benchmark: Changing Snakemake behavior to run through using micro-subsetted files ####
-if (benchmark==False):
+#### Quick mode: Changing Snakemake behavior to quickly run through using micro-subsetted files ####
+if (Quick==False):
     downloading_script="download_fastq.sh"
     mincontiglen=5000
     EUK_PROFILES="/mnt/metaeuk_profiles/"+ MetaEuk_reference
-    BATCH=BATCH
     megahit_version=megahit_version
     setn=setn
 else:
     downloading_script="download_fastq_short.sh" # subsets only first 10k reads
     mincontiglen=100 #otherwise no contigs left, too few reads for 5000kb+ contigs
     EUK_PROFILES="/mnt/metaeuk_profiles_short/MMETSP_uniclust50_MERC_profiles_more_than1_few"
-    BATCH="batch_benchmark"
     megahit_version="megahit_benchmark"
     setn=setn+"_bench"
 
 
 
-
+###########################
+##    Remote container   ##
+###########################
 
 # Attaching the remote S3 server for storing pipeline results.
 # IMPORTANT: Global credential variables should be specified in bash environment 
@@ -118,6 +115,7 @@ else:
 #           export MINIO_HOST="https://openstack.cebitec.uni-bielefeld.de:8080"
 #           export MINIO_ID="<secret-key-id>"
 #           export MINIO_SECRET="<secret-key>"
+
 import os
 from snakemake.remote.S3 import RemoteProvider as S3RemoteProvider
 S3 = S3RemoteProvider(host=os.environ["MINIO_HOST"],
@@ -134,67 +132,29 @@ ena = S3RemoteProvider(host="https://openstack.cebitec.uni-bielefeld.de:8080",
 
 
 
+###########################
+##  Email notifications  ##
+###########################
 
-####     Email notifications     ####
 targetmail="dembra96@gmail.com"
 
 onstart:
-    if (benchmark==False):
+    if (Quick==False):
         print("Workflow finished, no error")
         shell("mail -s 'Snakemake "+setn+" - Workflow started' %s < {log}" % targetmail)
 
 onsuccess:
-    if (benchmark==False):
+    if (Quick==False):
         print("Workflow finished, no error")
         shell("mail -s 'Snakemake "+setn+" - Workflow successfully finished' %s < {log}" % targetmail)
 
 onerror:
-    if (benchmark==False):
+    if (Quick==False):
         print("An error occurred")
         shell("mail -s 'Snakemake "+setn+" - an error occurred' %s < {log}" % targetmail)
 
 
 
-
-
-
-
-
-############################################
-###                                      ###
-###           Input functions            ###
-###                                      ###
-############################################
-
-# Helper function to list files on remote server via MinIO client.
-#  Gives a python list of file names found in the path by pattern.
-import subprocess
-
-def mc_ls(path="eukupload/", pattern=""):
-    mc_raw_output = str(subprocess.check_output(
-                             ("mc ls "+path+" | " + 
-                              "awk '{print $5}' | " + 
-                              "awk '/"+pattern+"/ {print}'"),
-                                                shell=True)
-                       )
-    mc_file_list = mc_raw_output.strip('b').strip("'").split("\\n")
-    return mc_file_list
-
-# Input function to obtain megahit results
-def get_megahit_source(sample):
-    #sample = "{wildcards.sample}".format(wildcards=wildcards)
-    if (os.path.isfile(setn+"/%s/contigs.megahit.fa" % sample)):
-        print("Megahit %s assembly was found locally and will be used." % sample)
-        output = setn+"/%s/contigs.megahit.fa"%sample
-    else:
-        remote_megahits = mc_ls(path="eukupload/eukcontainer/contigs/"+megahit_version+"/megahit", pattern="contigs\.megahit\.fa\.tar\.gz$")
-        if ("%s.contigs.megahit.fa.tar.gz"%sample in remote_megahits):
-            print("Remote copy of Megahit assembly %s was found and will be downloaded." % sample)
-            output = setn+"/%s/downloaded_contigs.megahit.fa"%sample
-        else:
-            print("Atention! No Megahit assembly for %s was found on a remote server or in local folder, so it will be performed de novo." % sample)
-            output = setn+"/%s/contigs.megahit.fa"%sample
-    return output
 
 
 
@@ -210,90 +170,40 @@ def get_megahit_source(sample):
 ############################################
 
 
-# Rule that determines required output of pipeline
+############################
+##        Main rule       ##
+############################
+
+# Determines required output of the pipeline
+
 rule all:
     input:
-        #report = S3.remote("eukcontainer/"+BATCH+"/"+ setn+".reports.tar.gz"),
-        #S3.remote("eukcontainer/"+BATCH+"/"+ setn+".tar.gz"),
-        #sample_list = S3.remote("eukcontainer/"+BATCH+"/"+ setn+"_samples.txt"),
-        setn+"/MetaEuk_preds.fasta",
-        #S3.remote("eukcontainer/contigs/"+megahit_version+"/"+EukRep_version+"_"+EukRep_mode+"/"+MetaEuk_version+"/"+MetaEuk_reference+"/"+setn+"_MetaEuk_preds.fasta.tar.gz"),
+        #setn+"/MetaEuk_preds.fasta",
+        S3.remote("eukcontainer/contigs/"+megahit_version+"/"+EukRep_version+"_"+EukRep_mode+"/"+MetaEuk_version+"/"+MetaEuk_reference+"/"+setn+"_MetaEuk_preds.fasta.tar.gz"),
         S3.remote(expand("eukcontainer/contigs/"+megahit_version+"/preprocessing_reports/{sample}.reports.tar.gz", sample=config["SAMPLE"])),
         S3.remote(expand("eukcontainer/contigs/"+megahit_version+"/QUAST_raw_contigs/{sample}.quast.raw.tar.gz", sample=config["SAMPLE"])),
         setn+"/multiqc_report.html",
-#compress all needed files (will be deprecated)
-rule tar_big_archive:
-    input: 
-        ##REPORTS
-        reports = [
-        #FastQC
-        expand(setn+"/{sample}/reads_{n}{trim}_fastqc.{ext}", 
-               sample=config["SAMPLE"], n=["1","2"], trim=["","_trim"], ext=["html","zip"]),
-        #Fastp
-        expand(setn+"/{sample}/fastp.html", sample=config["SAMPLE"]),
-        expand(setn+"/{sample}/fastp.json", sample=config["SAMPLE"]),
-        #QUAST
-        #setn+"/quast_multi_raw",
-        setn+"/quast_multi_filt_raw",
-        setn+"/quast_multi_EukRep", 
-        #MultiQC
-        setn+"/multiqc_report.html",
-        setn+"/multiqc_data",
-        #logs
-        setn+"/log_MetaEuk_easypredict.txt",
-        #expand(setn+"/{sample}/log_megahit.txt", sample=config["SAMPLE"]),
-        expand(setn+"/{sample}/log_EukRep.txt", sample=config["SAMPLE"])],
-        
-        ## RESULTS
-        #Megahit
-        #megahit = expand(setn+"/{sample}/contigs.megahit.fa", sample=config["SAMPLE"]),
-        #EukRep
-        eukrep = expand(setn+"/{sample}/contigs.EukRep.fa", sample=config["SAMPLE"]),
-        #MetaEuk
-	metaeuk = [setn+"/MetaEuk_preds.fasta",
-                   setn+"/MetaEuk_preds.fasta.headersMap.tsv"],
-    output:
-        main = S3.remote("eukcontainer/"+BATCH+"/"+ setn+".tar.gz"),
-    shell:
-        "tar -cf {output.main} -I 'pigz -p 14' {input} {setn}/tempFolder/latest/{{contigs*,MetaEuk_preds.*}}"
+        #sample_list = S3.remote("eukcontainer/"+BATCH+"/"+ setn+"_samples.txt"),
 
-rule tar_reports: #(will be deprecated)
-    input:
-        ##REPORTS
-        reports = [
-        #FastQC
-        expand(setn+"/{sample}/reads_{n}{trim}_fastqc.{ext}",
-               sample=config["SAMPLE"], n=["1","2"], trim=["","_trim"], ext=["html","zip"]),
-        #Fastp
-        expand(setn+"/{sample}/fastp.html", sample=config["SAMPLE"]),
-        expand(setn+"/{sample}/fastp.json", sample=config["SAMPLE"]),
-        #QUAST
-        #setn+"/quast_multi_raw",
-        setn+"/quast_multi_filt_raw",
-        setn+"/quast_multi_EukRep",
-        #MultiQC
-        setn+"/multiqc_report.html",
-        setn+"/multiqc_data",
-        #logs
-        setn+"/log_MetaEuk_easypredict.txt",
-        #expand(setn+"/{sample}/log_megahit.txt", sample=config["SAMPLE"]),
-        expand(setn+"/{sample}/log_EukRep.txt", sample=config["SAMPLE"])],
-    output:
-        report = S3.remote("eukcontainer/"+BATCH+"/"+ setn+".reports.tar.gz"),
-    shell:
-        "tar -czf {output.report} {input.reports}"
 
+
+
+
+
+
+############################
+##      Service rules     ##
+############################
 
 
 #rule to save sample accessions provided in yaml as simple text list to copy to remote container.
 rule write_samples:
     output:
-        sample_list = S3.remote("eukcontainer/"+BATCH+"/"+ setn+"_samples.txt"),
+        #sample_list = S3.remote("eukcontainer/"+BATCH+"/"+ setn+"_samples.txt"),
     run:
         with open(output[0], 'w') as f:
             for item in config["SAMPLE"]:
                 f.write("%s\n" % item)
-
 
     
 ### rule to download Protein profiles for MetaEuk if absent
@@ -324,7 +234,15 @@ rule GET_METAEUK_PROTEIN_PROFILES_short:
 
 
 
-### Preprocessing
+
+
+
+
+############################
+##      Preprocessing     ##
+############################
+
+
 rule download_fastq:
     output: 
         setn+"/{sample}/reads_1.fastq.gz",
@@ -394,7 +312,12 @@ rule upload_preprocessing_reports:
         "rm -r tmp_reports_{wildcards.sample} ; "
 
 
-### Assembly without filtering
+
+
+
+############################
+##        Assembly        ##
+############################
 
 rule megahit_unfiltered:
     input:
@@ -413,7 +336,7 @@ rule megahit_unfiltered:
     shell:
         "{{ time megahit -t 14 -1 {input[0]} -2 {input[1]} -o {output[0]} --min-contig-len 500; }} 2> {log}; "
         "cp {output[0]}/final.contigs.fa {output[1]}; " # copy results one folder up for proper QUAST labeling later
-        "tar -cf {output[2]} -I 'pigz' -C "+setn+" {wildcards.sample}/contigs.megahit.fa {wildcards.sample}/log_megahit.txt; "
+
 
 rule megahit_upload:
     input:
@@ -430,19 +353,9 @@ rule megahit_upload:
 
 
 
-
-
-# If the backup copies were detected on remote server, they will be used instaed of running new Megahit. 
-rule megahit_download:
-    input:
-        S3.remote("eukcontainer/contigs/"+megahit_version+"/megahit/{sample}.contigs.megahit.fa.tar.gz")
-    output:
-        setn+"/{sample}/downloaded_contigs.megahit.fa",
-    shell:
-        "mkdir -p {setn} ; "
-        "tar -xf {input} -C {setn} ; "
-        "mv {setn}/{wildcards.sample}/contigs.megahit.fa {output}"
-
+############################
+##    Contig processing   ##
+############################
 
 
 rule raw_contigs_size_filtering:
@@ -483,7 +396,11 @@ rule EukRep:
 
 
 
-# QUAST
+
+############################
+##  QUAST contig analysis ##
+############################
+
 
 rule QUAST_raw_contigs:
     input:
@@ -539,8 +456,14 @@ rule QUAST_multisample_EukRep:
 
 
 
-# Concatenating all EukRep contigs
-#  Refers only to remote files, no fork here unfortunately.
+
+
+############################
+##         Metaeuk        ##
+############################
+
+
+# Concatenating all EukRep contigs to speedup Metaeuk by running it on a combined input
 rule contig_concatenating:
     input:
         S3.remote(expand("eukcontainer/contigs/{megahit_version}/{EukRep_version}_{EukRep_mode}/eukrep/{sample}.contigs.EukRep.fa.tar.gz",
@@ -585,7 +508,14 @@ rule MetaEuk_easy_predict:
         " cd .."
 
 
-# MultiQC
+
+
+
+############################
+##  Final MultiQC report  ##
+############################
+
+
 rule MultiQC:
     input:
         #expand(setn+"/{sample}/{file}", sample=config["SAMPLE"], file=['reads_1_fastqc.html', 'reads_2_fastqc.html', 'reads_1_trim_fastqc.html', 'reads_2_trim_fastqc.html', 'fastp.html']),
