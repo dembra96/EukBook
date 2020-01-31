@@ -178,12 +178,11 @@ onerror:
 
 rule all:
     input:
-        #setn+"/MetaEuk_preds.fasta",
-        S3.remote("eukcontainer/contigs/"+megahit_version+"/"+EukRep_version+"_"+EukRep_mode+"/"+MetaEuk_version+"/"+MetaEuk_reference+"/"+setn+"_MetaEuk_preds.fasta.tar.gz"),
-        S3.remote(expand("eukcontainer/contigs/"+megahit_version+"/preprocessing_reports/{sample}.reports.tar.gz", sample=config["SAMPLE"])),
-        S3.remote(expand("eukcontainer/contigs/"+megahit_version+"/QUAST_raw_contigs/{sample}.quast.raw.tar.gz", sample=config["SAMPLE"])),
-        setn+"/multiqc_report.html",
-        #sample_list = S3.remote("eukcontainer/"+BATCH+"/"+ setn+"_samples.txt"),
+        MetaEuk = S3.remote("eukcontainer/contigs/"+megahit_version+"/"+EukRep_version+"_"+EukRep_mode+"/"+MetaEuk_version+"/"+MetaEuk_reference+"/"+setn+"_MetaEuk_preds.fasta.tar.gz"),
+        sample_list = S3.remote("eukcontainer/contigs/"+megahit_version+"/"+EukRep_version+"_"+EukRep_mode+"/"+MetaEuk_version+"/"+MetaEuk_reference+"/"+setn+"_samples.txt"),
+        preprcoessing_reports = S3.remote(expand("eukcontainer/contigs/"+megahit_version+"/preprocessing_reports/{sample}.reports.tar.gz", sample=config["SAMPLE"])),
+        QUASTs_raw_megahit_contigs = S3.remote(expand("eukcontainer/contigs/"+megahit_version+"/QUAST_raw_contigs/{sample}.quast.raw.tar.gz", sample=config["SAMPLE"])),
+        MultiQC = setn+"/multiqc_report.html",
 
 
 
@@ -199,7 +198,7 @@ rule all:
 #rule to save sample accessions provided in yaml as simple text list to copy to remote container.
 rule write_samples:
     output:
-        #sample_list = S3.remote("eukcontainer/"+BATCH+"/"+ setn+"_samples.txt"),
+        S3.remote("eukcontainer/contigs/"+megahit_version+"/"+EukRep_version+"_"+EukRep_mode+"/"+MetaEuk_version+"/"+MetaEuk_reference+"/"+setn+"_samples.txt"),
     run:
         with open(output[0], 'w') as f:
             for item in config["SAMPLE"]:
@@ -485,27 +484,33 @@ rule contig_concatenating:
 # MetaEuk 
 rule MetaEuk_easy_predict:
     input:
-        setn+"/EukRep_contigs_renamed_cat.fasta", #{input[0]}
-        EUK_PROFILES        #{input[1]}
+        contigs = setn+"/EukRep_contigs_renamed_cat.fasta",
+        profiles = EUK_PROFILES,
+        sample_list = S3.remote("eukcontainer/contigs/"+megahit_version+"/"+EukRep_version+"_"+EukRep_mode+"/"+MetaEuk_version+"/"+MetaEuk_reference+"/"+setn+"_samples.txt"),
+    params:
+        tmp = "tmp_MetaEuk_"+setn,
+        aux_files_folder = setn+"/tempFolder/latest",
+        aux_files_subfolder = "tempFolder/latest",
+        aux_files_pattern = "{contigs*,MetaEuk_preds.*}",
+    log: setn+"/log_MetaEuk_easypredict.txt"
     output:
-        setn+"/MetaEuk_preds.fasta",        #{output[0]}
-        directory(setn+"/tempFolder"), #{output[1]}
-        setn+"/MetaEuk_preds.fasta.headersMap.tsv", #just need to indicate it here so tar rule knows where to find it. 
-                                                    #no need to specify it in metaeuk command.
-        S3.remote("eukcontainer/contigs/"+megahit_version+"/"+EukRep_version+"_"+EukRep_mode+"/"+MetaEuk_version+"/"+MetaEuk_reference+"/"+setn+"_MetaEuk_preds.fasta.tar.gz"), #{output[3]}
-    log:
-        setn+"/log_MetaEuk_easypredict.txt"
+        fasta = setn+"/MetaEuk_preds.fasta",
+        tempfolder = directory(setn+"/tempFolder"),
+        tsv = setn+"/MetaEuk_preds.fasta.headersMap.tsv",
+        tar = S3.remote("eukcontainer/contigs/"+megahit_version+"/"+EukRep_version+"_"+EukRep_mode+"/"+MetaEuk_version+"/"+MetaEuk_reference+"/"+setn+"_MetaEuk_preds.fasta.tar.gz"),
     threads: maxthreads
     shell:
-        "{{ time metaeuk easy-predict {input[0]} {input[1]} {output[0]} {output[1]}"
+        #MetaEuk run
+        "{{ time metaeuk easy-predict {input.contigs} {input.profiles} {output.fasta} {output.tempfolder}"
         " --metaeuk-eval 0.0001 -e 100 --slice-search --min-ungapped-score 35"
         " --min-length 40 --min-exon-aa 20 --metaeuk-tcov 0.6; }} > {log} 2>&1 ; "
-        " cd "+setn+" ; " # had to cd because tar doesn't handle * when -C is specified
-        "tar -cf ../{output[3]} -I 'pigz' "
-        " MetaEuk_preds.fasta MetaEuk_preds.fasta.headersMap.tsv "
-        " tempFolder/latest/{{contigs*,MetaEuk_preds.*}} "
-        " log_MetaEuk_easypredict.txt ; "
-        " cd .."
+
+        # Pack MetaEuk results
+        "mkdir -p {params.tmp}/{params.aux_files_subfolder} ; "
+        "cp {params.aux_files_folder}/{params.aux_files_pattern} {params.tmp}/{params.aux_files_subfolder}/ ; "
+        "cp {output.fasta} {output.tsv} {log} {input.sample_list}   {params.tmp}/ ; "
+        "tar -czf {output.tar} -C {params.tmp} $(ls {params.tmp}/) ; "
+        "rm -r {params.tmp} ; "
 
 
 
