@@ -525,6 +525,7 @@ rule MultiQC:
     input:
         #expand(setn+"/{sample}/{file}", sample=config["SAMPLE"], file=['reads_1_fastqc.html', 'reads_2_fastqc.html', 'reads_1_trim_fastqc.html', 'reads_2_trim_fastqc.html', 'fastp.html']),
         report_tars = S3.remote(expand("eukcontainer/contigs/"+megahit_version+"/preprocessing_reports/{sample}.reports.tar.gz", sample=config["SAMPLE"])),
+        quasts_raw = S3.remote(expand("eukcontainer/contigs/"+megahit_version+"/megahit/{sample}.contigs.megahit.fa.tar.gz", sample=config["SAMPLE"])),
         #quasts_raw = expand(setn+"/quasts/quast_{stage}_{sample}", stage=["raw"], sample=config['SAMPLE']),
         #quasts_multi = expand(setn+"/{file}", file=['quast_multi_EukRep', 'quast_multi_filt_raw'])
     output:
@@ -534,6 +535,7 @@ rule MultiQC:
         mainfolder + "/yaml/conda_packages.yaml"
     shell:
         "for i in {input.report_tars}; do  tar -xzf $i -C {setn}; done ; "
+        "for i in {input.quasts_raw}; do  tar -xzf $i -C {setn}; done ; "
         "multiqc -d -f -o "+setn+" "+setn+"/"
 # -d option makes multiqc analyse all samples with same names. In our case all samples are reads_1/2, so this is crucial
 # -f option makes force overwrite of previous multiqc output. Important for Snakemake reruns.
