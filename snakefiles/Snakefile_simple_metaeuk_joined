@@ -176,7 +176,7 @@ onerror:
 
 # Determines required output of the pipeline
 
-rule all:
+rule All:
     input:
         MetaEuk = S3.remote(
            "eukcontainer/contigs/"+megahit_version+"/"+EukRep_version+"_"+EukRep_mode+"/"+
@@ -216,7 +216,7 @@ rule all:
 
 
 #rule to save sample accessions provided in yaml as simple text list to copy to remote container.
-rule write_samples:
+rule Write_samples:
     output:
         S3.remote("eukcontainer/contigs/"+megahit_version+"/"+EukRep_version+"_"+EukRep_mode+"/"+MetaEuk_version+"/"+MetaEuk_reference+"/"+setn+"_samples.txt"),
     run:
@@ -262,7 +262,7 @@ rule GET_METAEUK_PROTEIN_PROFILES_short:
 ############################
 
 
-rule download_fastq:
+rule Download_fastq:
     output: 
         setn+"/{sample}/reads_1.fastq.gz",
         setn+"/{sample}/reads_2.fastq.gz"
@@ -283,7 +283,7 @@ rule FastQC_untrimmed:
         "fastqc -t {threads} {input} "
 
         
-rule fastp_trimming:
+rule Fastp_trimming:
     input: 
         setn+"/{sample}/reads_1.fastq.gz",
         setn+"/{sample}/reads_2.fastq.gz"
@@ -312,7 +312,7 @@ rule FastQC_trimmed:
         "fastqc -t {threads} {input} "
 
 
-rule upload_preprocessing_reports:
+rule Upload_preprocessing_reports:
     input:
        fastqc1 = expand(setn+"/{{sample}}/reads_{n}_fastqc.{ext}", n=["1","2"], ext=["html","zip"]),
        fastp = [setn+"/{sample}/fastp.json", setn+"/{sample}/fastp.html"],
@@ -335,7 +335,7 @@ rule upload_preprocessing_reports:
 ##        Assembly        ##
 ############################
 
-rule megahit_unfiltered:
+rule Megahit_unfiltered:
     input:
         setn+"/{sample}/reads_1_trim.fastq.gz",
         setn+"/{sample}/reads_2_trim.fastq.gz"
@@ -354,7 +354,7 @@ rule megahit_unfiltered:
         "cp {output[0]}/final.contigs.fa {output[1]}; " # copy results one folder up for proper QUAST labeling later
 
 
-rule megahit_upload:
+rule Megahit_upload:
     input:
         setn+"/{sample}/contigs.megahit.fa", #{output[1]} #need to explicitly write in tar operation
         setn+"/{sample}/log_megahit.txt",
@@ -374,7 +374,7 @@ rule megahit_upload:
 ############################
 
 
-rule raw_contigs_size_filtering:
+rule Raw_contigs_size_filtering:
     input:
         S3.remote("eukcontainer/contigs/"+megahit_version+"/megahit/{sample}.contigs.megahit.fa.tar.gz"),
     params:
@@ -547,7 +547,7 @@ rule MultiQC:
 
 
 # Concatenating all EukRep contigs to speedup Metaeuk by running it on a combined input
-rule contig_concatenating:
+rule Contig_concatenating:
     input:
         S3.remote(expand("eukcontainer/contigs/{megahit_version}/{EukRep_version}_{EukRep_mode}/eukrep/{sample}.contigs.EukRep.fa.tar.gz",
                          sample=config["SAMPLE"],
