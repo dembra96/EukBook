@@ -359,19 +359,19 @@ rule megahit_upload:
 
 rule raw_contigs_size_filtering:
     input:
-        #get_megahit_source
         S3.remote("eukcontainer/contigs/"+megahit_version+"/megahit/{sample}.contigs.megahit.fa.tar.gz"),
+    params:
+        contigs = setn+"/{sample}/contigs.megahit.fa", # intermediate file
     output:
-        setn+"/{sample}/contigs.megahit.fa",             # {output[0]}
-        setn+"/{sample}/contigs.megahit.sizefiltered.fa", # {output[1]}
+        setn+"/{sample}/contigs.megahit.sizefiltered.fa", # {output[0]}
     shell:
         #unpack megahit contigs tar
         "mkdir -p {setn} ; "
-        "tar -xf {input} -C {setn} ; " #will give {output[0]}
+        "tar -xf {input} -C {setn} ; " #will give intermediate file
 
         # Run sizefiltering
         'awk \'BEGIN {{FS = "\\t" ; OFS = "\\n"}} {{header = $0 ; getline seq ; '
-        'if (length(seq) >= '+str(mincontiglen)+') {{print header, seq}}}}\' < {output[0]} > {output[1]}; '
+        'if (length(seq) >= '+str(mincontiglen)+') {{print header, seq}}}}\' < {params.contigs} > {output[0]}; '
         ## ALWAYS escape { } \ by {{ }} \\ in snakemake, if you want to pass { } \ to a command, such as awk
 
 
@@ -403,7 +403,6 @@ rule EukRep:
 
 rule QUAST_raw_contigs:
     input:
-        #get_megahit_source
         S3.remote("eukcontainer/contigs/"+megahit_version+"/megahit/{sample}.contigs.megahit.fa.tar.gz"),
     params:
         contigs=setn+"/{sample}/contigs.megahit.fa", # intermediate file
@@ -420,9 +419,8 @@ rule QUAST_raw_contigs:
         "tar -xf {input} -C {setn} ; " # will give intermediate file
 
         # Run QUAST
-        #"time quast -t {threads} --silent -o {output} {input}"
-        "quast -t {threads} --silent --min-contig "+str(mincontiglen)+" -o {output[0]} {params.contigs} ; "
-        
+        "quast -t {threads} --silent -o {output[0]} {params.contigs}"
+
         # Pack QUAST results
         # some manipulations to avoid having files under "set_x" folder in tar file:
         "mkdir -p {params.tmp}/quasts ; "
@@ -430,28 +428,55 @@ rule QUAST_raw_contigs:
         "tar -czf {output[1]} -C {params.tmp} $(ls {params.tmp}/) ; "
         "rm -r {params.tmp} ; "
 
-rule QUAST_multisample_raw_contigs_sizefiltered:
-    input:
-        expand("{setn}/{sample}/contigs.megahit.sizefiltered.fa", sample=config["SAMPLE"],setn=setn)
-    output:
-        directory(setn+"/quast_multi_filt_raw")
-    conda:
-        mainfolder + "/yaml/quast.yaml"
-    threads: 4
-    shell:
-        "quast -t {threads} --silent --min-contig "+str(mincontiglen)+" -o {output} {input}; "
 
-rule QUAST_multisample_EukRep:
+rule QUAST_raw_contigs_sizefiltered:
     input:
-        expand("{setn}/{sample}/contigs.EukRep.fa", sample=config["SAMPLE"],setn=setn)
+        setn+"/{sample}/contigs.megahit.sizefiltered.fa",
+    params:
+        tmp="tmp_quast_sizefilt_{sample}",  # temporary folder
     output:
-        directory(setn+"/quast_multi_EukRep")
+        directory(setn+"/quasts/quast_sizefilt_{sample}"),
+        S3.remote("eukcontainer/contigs/"+megahit_version+"/QUAST_raw_contigs/{sample}.quast.sizefilt.tar.gz"),
     conda:
         mainfolder + "/yaml/quast.yaml"
-    threads: 4
+    threads: 1
+    shell:
+        # Run QUAST
+        "quast -t {threads} --silent --min-contig "+str(mincontiglen)+" -o {output[0]} {input}; "
+
+        # Pack QUAST results
+        "mkdir -p {params.tmp}/quasts ; "
+        "cp -r {output[0]} {params.tmp}/quasts/ ; "
+        "tar -czf {output[1]} -C {params.tmp} $(ls {params.tmp}/) ; "
+        "rm -r {params.tmp} ; "
+
+
+
+rule QUAST_EukRep:
+    input:
+        S3.remote("eukcontainer/contigs/"+megahit_version+"/"+EukRep_version+"_"+EukRep_mode+"/eukrep/{sample}.contigs.EukRep.fa.tar.gz"),
+    params:
+        contigs=setn+"/{sample}/contigs.EukRep.fa", # intermediate file
+        tmp="tmp_quast_eukrep_{sample}",            # temporary folder
+    output:
+        directory(setn+"/quasts/quast_EukRep_{sample}"),
+        S3.remote("eukcontainer/contigs/"+megahit_version+"/"+EukRep_version+"_"+EukRep_mode+"/QUAST_EukRep/{sample}.quast.EukRep.tar.gz"),
+    conda:
+        mainfolder + "/yaml/quast.yaml"
+    threads: 1
     shell: 
-        #"time quast -t {threads} --silent -o {output} {input}"
-        "quast -t {threads} --silent --min-contig "+str(mincontiglen)+" -o {output} {input}"
+        #unpack EukRep contigs tar
+        "mkdir -p {setn} ; "
+        "tar -xf {input} -C {setn} ; " # will give intermediate file
+
+        # Run QUAST
+        "quast -t {threads} --silent --min-contig "+str(mincontiglen)+" -o {output[0]} {params.contigs} ; "
+
+        # Pack QUAST results
+        "mkdir -p {params.tmp}/quasts ; "
+        "cp -r {output[0]} {params.tmp}/quasts/ ; "
+        "tar -czf {output[1]} -C {params.tmp} $(ls {params.tmp}/) ; "
+        "rm -r {params.tmp} ; "
 
 
 
@@ -523,11 +548,10 @@ rule MetaEuk_easy_predict:
 
 rule MultiQC:
     input:
-        #expand(setn+"/{sample}/{file}", sample=config["SAMPLE"], file=['reads_1_fastqc.html', 'reads_2_fastqc.html', 'reads_1_trim_fastqc.html', 'reads_2_trim_fastqc.html', 'fastp.html']),
         report_tars = S3.remote(expand("eukcontainer/contigs/"+megahit_version+"/preprocessing_reports/{sample}.reports.tar.gz", sample=config["SAMPLE"])),
-        quasts_raw = S3.remote(expand("eukcontainer/contigs/"+megahit_version+"/megahit/{sample}.contigs.megahit.fa.tar.gz", sample=config["SAMPLE"])),
-        #quasts_raw = expand(setn+"/quasts/quast_{stage}_{sample}", stage=["raw"], sample=config['SAMPLE']),
-        #quasts_multi = expand(setn+"/{file}", file=['quast_multi_EukRep', 'quast_multi_filt_raw'])
+        quasts_raw = S3.remote(expand("eukcontainer/contigs/"+megahit_version+"/QUAST_raw_contigs/{sample}.quast.raw.tar.gz", sample=config["SAMPLE"])),
+        quasts_sizefilt = S3.remote(expand("eukcontainer/contigs/"+megahit_version+"/QUAST_raw_contigs/{sample}.quast.sizefilt.tar.gz", sample=config["SAMPLE"])),
+        quasts_eukrep = S3.remote(expand("eukcontainer/contigs/"+megahit_version+"/"+EukRep_version+"_"+EukRep_mode+"/QUAST_EukRep/{sample}.quast.EukRep.tar.gz", sample=config["SAMPLE"])),
     output:
         setn+"/multiqc_report.html",
         directory(setn+"/multiqc_data")
@@ -536,6 +560,8 @@ rule MultiQC:
     shell:
         "for i in {input.report_tars}; do  tar -xzf $i -C {setn}; done ; "
         "for i in {input.quasts_raw}; do  tar -xzf $i -C {setn}; done ; "
+        "for i in {input.quasts_sizefilt}; do  tar -xzf $i -C {setn}; done ; "
+        "for i in {input.quasts_eukrep}; do  tar -xzf $i -C {setn}; done ; "
         "multiqc -d -f -o "+setn+" "+setn+"/"
 # -d option makes multiqc analyse all samples with same names. In our case all samples are reads_1/2, so this is crucial
 # -f option makes force overwrite of previous multiqc output. Important for Snakemake reruns.
