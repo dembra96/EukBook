@@ -500,6 +500,48 @@ rule QUAST_EukRep:
 
 
 ############################
+##  Final MultiQC report  ##
+############################
+
+
+rule MultiQC:
+    input:
+        report_tars = S3.remote(expand("eukcontainer/contigs/"+megahit_version+"/preprocessing_reports/{sample}.reports.tar.gz", sample=config["SAMPLE"])),
+        quasts_raw = S3.remote(expand("eukcontainer/contigs/"+megahit_version+"/QUAST_raw_contigs/{sample}.quast.raw.tar.gz", sample=config["SAMPLE"])),
+        quasts_sizefilt = S3.remote(expand("eukcontainer/contigs/"+megahit_version+"/QUAST_raw_contigs/{sample}.quast.sizefilt.tar.gz", sample=config["SAMPLE"])),
+        quasts_eukrep = S3.remote(expand("eukcontainer/contigs/"+megahit_version+"/"+EukRep_version+"_"+EukRep_mode+"/QUAST_EukRep/{sample}.quast.EukRep.tar.gz", sample=config["SAMPLE"])),
+    params:
+        tmp = "tmp_MultiQC_"+setn
+    output:
+        report = setn+"/multiqc_report.html",
+        data = directory(setn+"/multiqc_data"),
+        tar = S3.remote("eukcontainer/contigs/"+megahit_version+"/"+EukRep_version+"_"+EukRep_mode+"/"+MetaEuk_version+"/"+MetaEuk_reference+"/"+setn+"_MultiQC.tar.gz"),
+    conda:
+        mainfolder + "/yaml/conda_packages.yaml"
+    shell:
+        # Unpack the downloaded report archives
+        "for i in {input.report_tars}; do  tar -xzf $i -C {setn}; done ; "
+        "for i in {input.quasts_raw}; do  tar -xzf $i -C {setn}; done ; "
+        "for i in {input.quasts_sizefilt}; do  tar -xzf $i -C {setn}; done ; "
+        "for i in {input.quasts_eukrep}; do  tar -xzf $i -C {setn}; done ; "
+
+        # Run MultiQC
+        "multiqc -d -f -o "+setn+" {setn}/quasts/ {setn}/*RR*/*fastqc* {setn}/*RR*/*fastp* ; "
+# -d option makes multiqc analyse all samples with same names. In our case all samples are reads_1/2, so this is crucial
+# -f option makes force overwrite of previous multiqc output. Important for Snakemake reruns.
+# -o specifies outdir of output files
+
+        # Pack MultiQC report
+        "mkdir -p {params.tmp} ; "
+        "cp -r {output.report} {output.data} {params.tmp}/ ; "
+        "tar -czf {output.tar} -C {params.tmp} $(ls {params.tmp}/) ; "
+        "rm -r {params.tmp} ; "
+
+
+
+
+
+############################
 ##         Metaeuk        ##
 ############################
 
@@ -554,45 +596,4 @@ rule MetaEuk_easy_predict:
         "tar -czf {output.tar} -C {params.tmp} $(ls {params.tmp}/) ; "
         "rm -r {params.tmp} ; "
 
-
-
-
-
-############################
-##  Final MultiQC report  ##
-############################
-
-
-rule MultiQC:
-    input:
-        report_tars = S3.remote(expand("eukcontainer/contigs/"+megahit_version+"/preprocessing_reports/{sample}.reports.tar.gz", sample=config["SAMPLE"])),
-        quasts_raw = S3.remote(expand("eukcontainer/contigs/"+megahit_version+"/QUAST_raw_contigs/{sample}.quast.raw.tar.gz", sample=config["SAMPLE"])),
-        quasts_sizefilt = S3.remote(expand("eukcontainer/contigs/"+megahit_version+"/QUAST_raw_contigs/{sample}.quast.sizefilt.tar.gz", sample=config["SAMPLE"])),
-        quasts_eukrep = S3.remote(expand("eukcontainer/contigs/"+megahit_version+"/"+EukRep_version+"_"+EukRep_mode+"/QUAST_EukRep/{sample}.quast.EukRep.tar.gz", sample=config["SAMPLE"])),
-    params:
-        tmp = "tmp_MultiQC_"+setn
-    output:
-        report = setn+"/multiqc_report.html",
-        data = directory(setn+"/multiqc_data"),
-        tar = S3.remote("eukcontainer/contigs/"+megahit_version+"/"+EukRep_version+"_"+EukRep_mode+"/"+MetaEuk_version+"/"+MetaEuk_reference+"/"+setn+"_MultiQC.tar.gz"),
-    conda:
-        mainfolder + "/yaml/conda_packages.yaml"
-    shell:
-        # Unpack the downloaded report archives
-        "for i in {input.report_tars}; do  tar -xzf $i -C {setn}; done ; "
-        "for i in {input.quasts_raw}; do  tar -xzf $i -C {setn}; done ; "
-        "for i in {input.quasts_sizefilt}; do  tar -xzf $i -C {setn}; done ; "
-        "for i in {input.quasts_eukrep}; do  tar -xzf $i -C {setn}; done ; "
-
-        # Run MultiQC
-        "multiqc -d -f -o "+setn+" {setn}/quasts/ {setn}/*RR*/*fastqc* {setn}/*RR*/*fastp* ; "
-# -d option makes multiqc analyse all samples with same names. In our case all samples are reads_1/2, so this is crucial
-# -f option makes force overwrite of previous multiqc output. Important for Snakemake reruns.
-# -o specifies outdir of output files
-
-        # Pack MultiQC report
-        "mkdir -p {params.tmp} ; "
-        "cp -r {output.report} {output.data} {params.tmp}/ ; "
-        "tar -czf {output.tar} -C {params.tmp} $(ls {params.tmp}/) ; "
-        "rm -r {params.tmp} ; "
 
