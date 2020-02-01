@@ -452,7 +452,7 @@ rule QUAST_raw_contigs_sizefiltered:
     params:
         tmp="tmp_quast_sizefilt_{sample}",  # temporary folder
     output:
-        directory(setn+"/quasts/quast_sizefilt_{sample}"),
+        directory(setn+"/quasts/quast_filtsize_{sample}"),
         S3.remote("eukcontainer/contigs/"+megahit_version+"/QUAST_raw_contigs/{sample}.quast.sizefilt.tar.gz"),
     conda:
         mainfolder + "/yaml/quast.yaml"
@@ -585,7 +585,7 @@ rule MultiQC:
         "for i in {input.quasts_eukrep}; do  tar -xzf $i -C {setn}; done ; "
 
         # Run MultiQC
-        "multiqc -d -f -o "+setn+" "+setn+"/ ; "
+        "multiqc -d -f -o "+setn+" {setn}/quasts/ {setn}/*RR*/*fastqc* {setn}/*RR*/*fastp* ; "
 # -d option makes multiqc analyse all samples with same names. In our case all samples are reads_1/2, so this is crucial
 # -f option makes force overwrite of previous multiqc output. Important for Snakemake reruns.
 # -o specifies outdir of output files
