@@ -1,0 +1,12 @@
+#These are the samples cherry-picked for different Euk content
+
+SAMPLESET:
+   - set_photero
+SAMPLE:
+   - SRR5917220 #  1 the most tested sample; high_euk
+   - SRR5918406 #  2 - low euk
+   - SRR2844600 #  6 second the most tested sample, small; low euk
+   - SRR5788362 # 11 - marine metagenome, low euk, high unknown
+   - SRR3989119 # 19 - BIG phytoplankton sample
+
+

@@ -140,7 +140,7 @@ targetmail="dembra96@gmail.com"
 
 onstart:
     if (Quick==False):
-        print("Workflow finished, no error")
+        print("Workflow started, sample set: ", setn)
         shell("mail -s 'Snakemake "+setn+" - Workflow started' %s < {log}" % targetmail)
 
 onsuccess:
@@ -315,11 +315,8 @@ rule FastQC_trimmed:
 rule upload_preprocessing_reports:
     input:
        fastqc1 = expand(setn+"/{{sample}}/reads_{n}_fastqc.{ext}", n=["1","2"], ext=["html","zip"]),
-       fastp = [setn+"/{sample}/reads_1_trim.fastq.gz",
-                setn+"/{sample}/reads_2_trim.fastq.gz",
-                setn+"/{sample}/fastp.json",
-                setn+"/{sample}/fastp.html"],
-       fsatqc2 = expand(setn+"/{{sample}}/reads_{n}_trim_fastqc.{ext}", n=["1","2"], ext=["html","zip"]),
+       fastp = [setn+"/{sample}/fastp.json", setn+"/{sample}/fastp.html"],
+       fastqc2 = expand(setn+"/{{sample}}/reads_{n}_trim_fastqc.{ext}", n=["1","2"], ext=["html","zip"]),
     output:
        S3.remote("eukcontainer/contigs/"+megahit_version+"/preprocessing_reports/{sample}.reports.tar.gz")
     threads: 1
@@ -439,7 +436,7 @@ rule QUAST_raw_contigs:
         "tar -xf {input} -C {setn} ; " # will give intermediate file
 
         # Run QUAST
-        "quast -t {threads} --silent -o {output[0]} {params.contigs}"
+        "quast -t {threads} --silent -o {output[0]} {params.contigs} ; "
 
         # Pack QUAST results
         # some manipulations to avoid having files under "set_x" folder in tar file:
