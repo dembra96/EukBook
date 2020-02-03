@@ -48,12 +48,12 @@ availabilityZone: default
 # master configuration 
 masterInstance:
   type: de.NBI mini
-  image: c66118a6-fc9c-4771-8709-d91d5eac1c72 
+  image: 7d0dc335-0b23-40b9-9bef-8ce81b0a8d09 # Ubuntu 18.04 LTS (2020-01-21)
 
 # worker configuration
 workerInstances:
   - type: de.NBI highmem medium
-    image: 2743ba4b-8ef5-4cea-bf41-b27320d15e53
+    image: 2743ba4b-8ef5-4cea-bf41-b27320d15e53 # Test worker node 2
     count: 10
 
 
