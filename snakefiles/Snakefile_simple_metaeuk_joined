@@ -56,7 +56,7 @@
 
 mainfolder='/home/ubuntu/EukBook'
 maxthreads = snakemake.utils.available_cpu_count()
-megahit_version = "megahit_v1.2.9_fastp_trim_cut" # Snakemake will create this remote folder for megahit results.
+megahit_version = "megahit_v1.2.9" # Snakemake will create this remote folder for megahit results.
                                    # Prevents overwriting if different version of assembler is used.
 EukRep_version = "EukRep_v0.6.6"
 EukRep_mode = "lenient"
@@ -287,9 +287,6 @@ rule Fastp_trimming:
     input: 
         setn+"/{sample}/reads_1.fastq.gz",
         setn+"/{sample}/reads_2.fastq.gz"
-    params:
-        setn+"/{sample}/reads_1_temp.fastq.gz",
-        setn+"/{sample}/reads_2_temp.fastq.gz",
     output: 
         setn+"/{sample}/reads_1_trim.fastq.gz",
         setn+"/{sample}/reads_2_trim.fastq.gz",
@@ -299,9 +296,7 @@ rule Fastp_trimming:
     conda:
         mainfolder + "/yaml/conda_packages.yaml"
     shell: 
-        "fastp -w {threads} -i {input[0]} -I {input[1]} -o {params[0]} -O {params[1]} -j {output[2]} -h {output[3]} ; "
-        "fastp -w {threads} -i {params[0]} -I {params[1]} -o {output[0]} -O {output[1]} -j {output[2]} -h {output[3]} ; "
-        "rm {params} ; "
+        "fastp -w {threads} -i {input[0]} -I {input[1]} -o {output[0]} -O {output[1]} -j {output[2]} -h {output[3]} ; "
 
 rule FastQC_trimmed:
     input:
