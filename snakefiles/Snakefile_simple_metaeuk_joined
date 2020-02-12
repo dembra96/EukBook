@@ -18,12 +18,13 @@
 # Main arguments to the Megahit Snakemake pipeline must be passed with a config.
 
 configfile: "/home/ubuntu/EukBook/config/config.yaml"
-#configfile: "/home/ubuntu/EukBook/config/config_samples.yaml"
-# Yes, more than one config file may be specified, additionally even by --configfile command line option.
+# Additionally, samples.yaml file should by provided with --configfile command line option.
+
+import os
+snakemake_folder = os.getcwd()
 
 workdir: config['workdir'] #all files and conda env are created here, can be overwritten with command line option -d
 
-mainfolder        = config['mainfolder']
 megahit_version   = config['megahit_version']
 EukRep_version    = config['EukRep_version']
 EukRep_mode       = config['EukRep_mode']
@@ -233,7 +234,7 @@ rule Download_fastq:
         setn+"/{sample}/reads_2.fastq.gz"
     threads: 1
     shell: 
-        "{mainfolder}/scripts/" + downloading_script + " {wildcards.sample} {output}" 
+        snakemake_folder + "/scripts/" + downloading_script + " {wildcards.sample} {output}" 
 
 
 rule FastQC_untrimmed:
@@ -523,7 +524,7 @@ rule Contig_concatenating:
         "mkdir -p {setn} ;"
         "cat {input} > aggl_archive ; " 
         "cat {input} | tar -xzivf - -C "+setn+ " ; " +
-        mainfolder + "/scripts/contig_rename_concat.sh {output} " + 
+        snakemake_folder + "/scripts/contig_rename_concat.sh {output} " + 
         ' '.join(expand("{setn}/{sample}/contigs.EukRep.fa", setn=setn, sample=config['SAMPLE']))
 
 
