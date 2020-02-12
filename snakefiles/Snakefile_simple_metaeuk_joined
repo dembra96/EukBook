@@ -242,8 +242,7 @@ rule FastQC_untrimmed:
         setn+"/{sample}/reads_2.fastq.gz"
     output:
         expand(setn+"/{{sample}}/reads_{n}_fastqc.{ext}", n=["1","2"], ext=["html","zip"]),
-    conda:
-        mainfolder + "/yaml/conda_packages.yaml"
+    conda: "yaml/conda_packages.yaml"
     threads: 2
     shell: 
         "fastqc -q -t {threads} {input} "
@@ -259,8 +258,7 @@ rule Fastp_trimming:
         setn+"/{sample}/fastp.json",
         setn+"/{sample}/fastp.html" 
     threads: 4
-    conda:
-        mainfolder + "/yaml/conda_packages.yaml"
+    conda: "yaml/conda_packages.yaml"
     shell: 
         "fastp -r -w {threads} -i {input[0]} -I {input[1]} -o {output[0]} -O {output[1]} -j {output[2]} -h {output[3]} ; "
 
@@ -270,8 +268,7 @@ rule FastQC_trimmed:
         setn+"/{sample}/reads_2_trim.fastq.gz"
     output:
         expand(setn+"/{{sample}}/reads_{n}_trim_fastqc.{ext}", n=["1","2"], ext=["html","zip"]),
-    conda:
-        mainfolder + "/yaml/conda_packages.yaml"
+    conda: "yaml/conda_packages.yaml"
     threads: 2
     shell:
         "fastqc -q -t {threads} {input} "
@@ -309,8 +306,7 @@ rule Megahit_unfiltered:
         setn+"/{sample}/contigs.megahit.fa", #{output[1]} #need to explicitly write in tar operation
     log:
         setn+"/{sample}/log_megahit.txt" #need to explicitly write in tar operation
-    conda:
-        mainfolder + "/yaml/megahit.yaml"
+    conda: "yaml/megahit.yaml"
     threads: 7 # But for Megahit I actually specify -t 14 .
                # This will allow two megahits run in parallell and make sure all cores are 100% busy all the time, 
                # because with single megahit run on all cores they are ~75% occupied on average.
@@ -395,8 +391,7 @@ rule QUAST_raw_contigs:
     output:
         directory(setn+"/quasts/quast_raw_{sample}"),   # {output[0]}
         S3.remote("eukcontainer/contigs/"+megahit_version+"/QUAST_raw_contigs/{sample}.quast.raw.tar.gz"), # {output[1]}
-    conda:
-        mainfolder + "/yaml/quast.yaml"
+    conda: "yaml/quast.yaml"
     threads: 1
     shell:
         #unpack megahit contigs tar
@@ -422,8 +417,7 @@ rule QUAST_raw_contigs_sizefiltered:
     output:
         directory(setn+"/quasts/quast_filtsize_{sample}"),
         S3.remote("eukcontainer/contigs/"+megahit_version+"/QUAST_raw_contigs/{sample}.quast.sizefilt.tar.gz"),
-    conda:
-        mainfolder + "/yaml/quast.yaml"
+    conda: "yaml/quast.yaml"
     threads: 1
     shell:
         # Run QUAST
@@ -446,8 +440,7 @@ rule QUAST_EukRep:
     output:
         directory(setn+"/quasts/quast_EukRep_{sample}"),
         S3.remote("eukcontainer/contigs/"+megahit_version+"/"+EukRep_version+"_"+EukRep_mode+"/QUAST_EukRep/{sample}.quast.EukRep.tar.gz"),
-    conda:
-        mainfolder + "/yaml/quast.yaml"
+    conda: "yaml/quast.yaml"
     threads: 1
     shell: 
         #unpack EukRep contigs tar
@@ -484,8 +477,7 @@ rule MultiQC:
         report = setn+"/multiqc_report.html",
         data = directory(setn+"/multiqc_data"),
         tar = S3.remote("eukcontainer/contigs/"+megahit_version+"/"+EukRep_version+"_"+EukRep_mode+"/"+MetaEuk_version+"/"+MetaEuk_reference+"/"+setn+"_MultiQC.tar.gz"),
-    conda:
-        mainfolder + "/yaml/conda_packages.yaml"
+    conda: "yaml/conda_packages.yaml"
     threads: 1
     shell:
         # Unpack the downloaded report archives
