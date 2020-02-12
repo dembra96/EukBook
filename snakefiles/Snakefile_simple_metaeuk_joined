@@ -17,51 +17,19 @@
 
 # Main arguments to the Megahit Snakemake pipeline must be passed with a config.
 
-#### Required input config parameters: ####
-# (must be passed with --configafile from yaml or json file, or in Snakemake command with --config)
-# (accessed in current snakefile with config['PARAMETER'])
-#
-#  * SAMPLE    - list of desired sample accessions to obtain MetaEuk predictions for.
-#  * SAMPLESET - unique name for the set of selected accesions. 
-#                Will be used to create a local subfolder and remote MetaEuk results folder.
+configfile: "/home/ubuntu/EukBook/config/config.yaml"
+#configfile: "/home/ubuntu/EukBook/config/config_samples.yaml"
+# Yes, more than one config file may be specified, additionally even by --configfile command line option.
 
-###  Example config usage
-#   snakemake [other arguments] --config SAMPLE=SRR2844600 SAMPLESET=set_07 
-#   snakemake [other arguments] --configfile path/to/configfile.yaml
-#       Example configfile.yaml:
-#            SAMPLESET:
-#               - set1
-#            SAMPLE:
-#               - SRR5918406
-#               - SRR5788362
-#               - SRR5788367
-#               - ...
-#
-#       NOTE: --config can pass only one string value for a parameter, e.g. only one sample.
-#             Passing multiple samples is possible only with config file. 
-#       NOTE: If both --config and --configfile are used and specify parameter with same name, 
-#             --config parameter will overwrite the one passed from --configfile.
-#             Parameters with different names will end up in final config independently 
-#             of way they were specified.
+workdir: config['workdir'] #all files and conda env are created here, can be overwritten with command line option -d
 
-
-
-
-
-
-
-############################
-##  Hardcoded parameters  ##
-############################
-
-mainfolder='/home/ubuntu/EukBook'
-maxthreads = snakemake.utils.available_cpu_count()
-megahit_version = "megahit_v1.2.9" # Snakemake will create this remote folder for megahit results.
-                                   # Prevents overwriting if different version of assembler is used.
-EukRep_version = "EukRep_v0.6.6"
-EukRep_mode = "lenient"
-MetaEuk_version = "MetaEuk_alpha"
-MetaEuk_reference = "metaeuk_ref_profiles_more_than1_MMETSP_zenodo_3247846_profiles"
+mainfolder        = config['mainfolder']
+megahit_version   = config['megahit_version']
+EukRep_version    = config['EukRep_version']
+EukRep_mode       = config['EukRep_mode']
+MetaEuk_version   = config['MetaEuk_version']
+MetaEuk_reference = config['MetaEuk_reference']
+Quick_mode        = config['Quick_mode']
 
 
 
@@ -82,12 +50,9 @@ elif type(config["SAMPLESET"]) is str:
 ###########################
 ##      Quick mode?      ##
 ###########################
-#Quick=True
-Quick=False
-
 
 #### Quick mode: Changing Snakemake behavior to quickly run through using micro-subsetted files ####
-if (Quick==False):
+if (Quick_mode==False):
     downloading_script="download_fastq.sh"
     mincontiglen=5000
     EUK_PROFILES="/mnt/metaeuk_profiles/"+ MetaEuk_reference
@@ -129,9 +94,6 @@ ena = S3RemoteProvider(host="https://openstack.cebitec.uni-bielefeld.de:8080",
 
 
 
-
-
-
 ###########################
 ##  Email notifications  ##
 ###########################
@@ -139,17 +101,17 @@ ena = S3RemoteProvider(host="https://openstack.cebitec.uni-bielefeld.de:8080",
 targetmail="dembra96@gmail.com"
 
 onstart:
-    if (Quick==False):
+    if (Quick_mode==False):
         print("Workflow started, sample set: ", setn)
         shell("mail -s 'Snakemake "+setn+" - Workflow started' %s < {log}" % targetmail)
 
 onsuccess:
-    if (Quick==False):
+    if (Quick_mode==False):
         print("Workflow finished, no error")
         shell("mail -s 'Snakemake "+setn+" - Workflow successfully finished' %s < {log}" % targetmail)
 
 onerror:
-    if (Quick==False):
+    if (Quick_mode==False):
         print("An error occurred")
         shell("mail -s 'Snakemake "+setn+" - an error occurred' %s < {log}" % targetmail)
 
@@ -219,6 +181,7 @@ rule All:
 rule Write_samples:
     output:
         S3.remote("eukcontainer/contigs/"+megahit_version+"/"+EukRep_version+"_"+EukRep_mode+"/"+MetaEuk_version+"/"+MetaEuk_reference+"/"+setn+"_samples.txt"),
+    threads: 1
     run:
         with open(output[0], 'w') as f:
             for item in config["SAMPLE"]:
@@ -230,6 +193,7 @@ rule Write_samples:
 rule GET_METAEUK_PROTEIN_PROFILES:
     output:
         "/mnt/metaeuk_profiles/metaeuk_ref_profiles_more_than1_MMETSP_zenodo_3247846_profiles"
+    threads: 1
     shell:
         "if mc cp --recursive eukupload/eukcontainer/metaeuk_profiles /mnt/ ; "
         "then echo 'Protein profiles successfully copied from eukcontainer mc copy.'; "
@@ -242,6 +206,7 @@ rule GET_METAEUK_PROTEIN_PROFILES:
 rule GET_METAEUK_PROTEIN_PROFILES_short:
     output:
         "/mnt/metaeuk_profiles_short/MMETSP_uniclust50_MERC_profiles_more_than1_few"
+    threads: 1
     shell:
         "if mc cp --recursive eukupload/eukcontainer/metaeuk_profiles_short /mnt/ ; "
         "then echo 'Protein profiles successfully copied from eukcontainer mc copy.'; "
@@ -266,6 +231,7 @@ rule Download_fastq:
     output: 
         setn+"/{sample}/reads_1.fastq.gz",
         setn+"/{sample}/reads_2.fastq.gz"
+    threads: 1
     shell: 
         "{mainfolder}/scripts/" + downloading_script + " {wildcards.sample} {output}" 
 
@@ -280,7 +246,7 @@ rule FastQC_untrimmed:
         mainfolder + "/yaml/conda_packages.yaml"
     threads: 2
     shell: 
-        "fastqc -t {threads} {input} "
+        "fastqc -q -t {threads} {input} "
 
         
 rule Fastp_trimming:
@@ -296,7 +262,7 @@ rule Fastp_trimming:
     conda:
         mainfolder + "/yaml/conda_packages.yaml"
     shell: 
-        "fastp -w {threads} -i {input[0]} -I {input[1]} -o {output[0]} -O {output[1]} -j {output[2]} -h {output[3]} ; "
+        "fastp -r -w {threads} -i {input[0]} -I {input[1]} -o {output[0]} -O {output[1]} -j {output[2]} -h {output[3]} ; "
 
 rule FastQC_trimmed:
     input:
@@ -308,7 +274,7 @@ rule FastQC_trimmed:
         mainfolder + "/yaml/conda_packages.yaml"
     threads: 2
     shell:
-        "fastqc -t {threads} {input} "
+        "fastqc -q -t {threads} {input} "
 
 
 rule Upload_preprocessing_reports:
@@ -345,9 +311,9 @@ rule Megahit_unfiltered:
         setn+"/{sample}/log_megahit.txt" #need to explicitly write in tar operation
     conda:
         mainfolder + "/yaml/megahit.yaml"
-    threads: 7 #But for Megahit I specify -t 14 .
+    threads: 7 # But for Megahit I actually specify -t 14 .
                # This will allow two megahits run in parallell and make sure all cores are 100% busy all the time, 
-               # because with single megahit on all cores they are ~75% occupied on average.
+               # because with single megahit run on all cores they are ~75% occupied on average.
     shell:
         "{{ time megahit -t 14 -1 {input[0]} -2 {input[1]} -o {output[0]} --min-contig-len 500; }} 2> {log}; "
         "cp {output[0]}/final.contigs.fa {output[1]}; " # copy results one folder up for proper QUAST labeling later
@@ -359,6 +325,7 @@ rule Megahit_upload:
         setn+"/{sample}/log_megahit.txt",
     output:
         S3.remote("eukcontainer/contigs/"+megahit_version+"/megahit/{sample}.contigs.megahit.fa.tar.gz"), #{output[2]}
+    threads: 1
     shell:
         "touch {output} ; " # IMPORTANT! A stamp to reserve the temp local folder,
                             # so no finished tarring processes will delete it before all other tars also finish. 
@@ -380,6 +347,7 @@ rule Raw_contigs_size_filtering:
         contigs = setn+"/{sample}/contigs.megahit.fa", # intermediate file
     output:
         setn+"/{sample}/contigs.megahit.sizefiltered.fa", # {output[0]}
+    threads: 1
     shell:
         #unpack megahit contigs tar
         "mkdir -p {setn} ; "
@@ -401,6 +369,7 @@ rule EukRep:
         S3.remote("eukcontainer/contigs/"+megahit_version+"/"+EukRep_version+"_"+EukRep_mode+"/eukrep/{sample}.contigs.EukRep.fa.tar.gz"), #{output[1]}
     log:
         setn+"/{sample}/log_EukRep.txt"
+    threads: 1
     shell:
         "touch {output[1]} ; "
         "{{ time EukRep -i {input} -o {output[0]} -m "+EukRep_mode+" --min "+str(mincontiglen)+"; }} 2> {log} ; "
@@ -517,6 +486,7 @@ rule MultiQC:
         tar = S3.remote("eukcontainer/contigs/"+megahit_version+"/"+EukRep_version+"_"+EukRep_mode+"/"+MetaEuk_version+"/"+MetaEuk_reference+"/"+setn+"_MultiQC.tar.gz"),
     conda:
         mainfolder + "/yaml/conda_packages.yaml"
+    threads: 1
     shell:
         # Unpack the downloaded report archives
         "for i in {input.report_tars}; do  tar -xzf $i -C {setn}; done ; "
@@ -556,6 +526,7 @@ rule Contig_concatenating:
                          EukRep_mode=EukRep_mode))
     output:
         setn+"/EukRep_contigs_renamed_cat.fasta"
+    threads: 1
     shell:
         "mkdir -p {setn} ;"
         "cat {input} > aggl_archive ; " 
@@ -581,7 +552,6 @@ rule MetaEuk_easy_predict:
         tempfolder = directory(setn+"/tempFolder"),
         tsv = setn+"/MetaEuk_preds.fasta.headersMap.tsv",
         tar = S3.remote("eukcontainer/contigs/"+megahit_version+"/"+EukRep_version+"_"+EukRep_mode+"/"+MetaEuk_version+"/"+MetaEuk_reference+"/"+setn+"_MetaEuk_preds.fasta.tar.gz"),
-    threads: maxthreads
     shell:
         #MetaEuk run
         "{{ time metaeuk easy-predict {input.contigs} {input.profiles} {output.fasta} {output.tempfolder}"
