@@ -53,8 +53,8 @@ masterInstance:
 # worker configuration
 workerInstances:
   - type: de.NBI highmem medium
-    image: 2743ba4b-8ef5-4cea-bf41-b27320d15e53 # Test worker node 2
-    count: 10
+    image: 8d11f92f-d0ed-4fb5-8801-4b2662cbd81d # Template worker node 3 (conda cleaned)
+    count: 5
 
 
 
