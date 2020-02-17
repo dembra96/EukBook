@@ -1,0 +1,34 @@
+#!/bin/bash
+
+# This is a custom wrapper script for Snakemake EukBook pipeline.
+
+# Wrapper features:
+# 1. By default sets snakemake options always used in EukBook pipeline. 
+#    The only option stil required is is the samples file (see example). 
+# 2. Additionally specifies the path to conda packages of pipeline.
+# 3. Measures computation time with "time". 
+# 4. Saves the entire stdout, as well as timing and start/end time
+#    to non-default log file of desired location.
+
+# Example minimal usege:
+# ./Snakemake --configfile sample_yamls/samples_small.yaml
+# Example with more options (all the options are passed to snakemake command) :
+# ./Snakemake --configfile sample_yamls/samples_small.yaml --config Quick_mode=True -n -R Download_fastq
+
+
+LOGDIR="${HOME}/snakemake_logs"
+mkdir -p $LOGDIR
+START=$(date +"%y-%m-%d_%H-%M-%S")
+LOGFILE=${LOGDIR}/snakemake_${START}_log.txt
+
+
+echo "Pipeline started on" ${START} > ${LOGFILE}
+
+( time snakemake -p -j --use-conda --conda-prefix ${HOME}/conda_snakemake_EukBook ${@} ) |& tee -a ${LOGFILE}
+
+END=$(date +"%y-%m-%d_%H-%M-%S")
+
+echo "Pipeline started on: " ${START}  >> ${LOGFILE}
+echo "Pipeline ended on:   " ${END}    >> ${LOGFILE}
+
+
