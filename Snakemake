@@ -16,6 +16,8 @@
 # ./Snakemake --configfile sample_yamls/samples_small.yaml --config Quick_mode=True -n -R Download_fastq
 
 
+source MinIO_secret.sh
+
 LOGDIR="${HOME}/snakemake_logs"
 mkdir -p $LOGDIR
 START=$(date +"%y-%m-%d_%H-%M-%S")
