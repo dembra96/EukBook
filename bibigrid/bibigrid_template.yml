@@ -53,7 +53,7 @@ masterInstance:
 # worker configuration
 workerInstances:
   - type: de.NBI highmem medium
-    image: 8d11f92f-d0ed-4fb5-8801-4b2662cbd81d # Template worker node 3 (conda cleaned)
+    image: 7d0dc335-0b23-40b9-9bef-8ce81b0a8d09 # Ubuntu 18.04 LTS (2020-01-21)
     count: 5
 
 
@@ -72,7 +72,7 @@ slurm: yes
 # Create a shared file system between all nodes (/vol/spool)
 nfs: yes
 # Configure Theia Web IDE on master node
-theia: no
+#theia: no
 
 
 
