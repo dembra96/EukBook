@@ -1,0 +1,7 @@
+SAMPLESET: set_gut_bacterial
+SAMPLE:
+        - SRR1793377
+        - SRR3992999
+        - SRR5558157
+        - SRR7162428
+        - SRR5091596

@@ -30,6 +30,8 @@ EukRep_version    = config['EukRep_version']
 EukRep_mode       = config['EukRep_mode']
 MetaEuk_version   = config['MetaEuk_version']
 MetaEuk_reference = config['MetaEuk_reference']
+MetaEuk_taxAnnot  = config['MetaEuk_taxAnnot']
+MetaEuk_taxAnnot_small = "seqTaxOnlyCharoDB"
 Quick_mode        = config['Quick_mode']
 
 
@@ -57,12 +59,14 @@ if (Quick_mode==False):
     downloading_script="download_fastq.sh"
     mincontiglen=5000
     EUK_PROFILES="/mnt/metaeuk_profiles/"+ MetaEuk_reference
+    EUK_taxAnnot="/mnt/metaeuk_taxAnnot/"+ MetaEuk_taxAnnot
     megahit_version=megahit_version
     setn=setn
 else:
     downloading_script="download_fastq_short.sh" # subsets only first 10k reads
     mincontiglen=100 #otherwise no contigs left, too few reads for 5000kb+ contigs
     EUK_PROFILES="/mnt/metaeuk_profiles_short/MMETSP_uniclust50_MERC_profiles_more_than1_few"
+    EUK_taxAnnot="/mnt/metaeuk_taxAnnot/"+ MetaEuk_taxAnnot_small
     megahit_version="megahit_benchmark"
     setn=setn+"_bench"
 
@@ -145,6 +149,10 @@ rule All:
            "eukcontainer/contigs/"+megahit_version+"/"+EukRep_version+"_"+EukRep_mode+"/"+
                 MetaEuk_version+"/"+MetaEuk_reference+"/"+setn+"_MetaEuk_preds.fasta.tar.gz"),
 
+        MetaEuk_taxAnnot = S3.remote(
+           "eukcontainer/contigs/"+megahit_version+"/"+EukRep_version+"_"+EukRep_mode+"/"+
+                MetaEuk_version+"/"+MetaEuk_reference+"/"+setn+"_MetaEuk_preds_taxAnnot.tar.gz"),
+
         sample_list = S3.remote(
            "eukcontainer/contigs/"+megahit_version+"/"+EukRep_version+"_"+EukRep_mode+"/"+
                 MetaEuk_version+"/"+MetaEuk_reference+"/"+setn+"_samples.txt"),
@@ -218,8 +226,31 @@ rule GET_METAEUK_PROTEIN_PROFILES_short:
         "fi; "
 
 
+### rule to download Taxonomic Annotation DB for MetaEuk if absent
+# normally would be run only once with the very first snakemake launch on a new machine
+rule GET_METAEUK_TAXANNOTDB:
+    output:
+        "/mnt/metaeuk_taxAnnot/"+ MetaEuk_taxAnnot
+    threads: 1
+    shell:
+        "if mc cp --recursive eukupload/eukcontainer/metaeuk_taxAnnot /mnt/ ; "
+        "then echo 'Protein Tax Annotation DB successfully copied from eukcontainer mc copy.'; "
+        "else wget http://wwwuser.gwdg.de/~compbiol/metaeuk/2020_TAX_DB/"+MetaEuk_taxAnnot+".tar.gz; "
+        "tar -C /mnt/metaeuk_taxAnnot/ -xzf "+MetaEuk_taxAnnot+".tar.gz; "
+        "rm "+MetaEuk_taxAnnot+".tar.gz; "
+        "echo 'Protein Tax Annotation DB successfully downloaded from gwdg server.'; "
+        "fi; "
 
-
+# rule to create a small sub-file of Taxonomic Annotation DB for MetaEuk for quick run
+rule GET_METAEUK_TAXANNOTDB_SMALL:
+    input:
+        "/mnt/metaeuk_taxAnnot/"+ MetaEuk_taxAnnot
+    output:
+        "/mnt/metaeuk_taxAnnot/"+ MetaEuk_taxAnnot_small
+    threads: 1
+    shell: 
+        "cd /mnt/metaeuk_taxAnnot/ ; "
+        "metaeuk filtertaxseqdb "+MetaEuk_taxAnnot+" "+MetaEuk_taxAnnot_small+" --taxon-list 304574"
 
 
 
@@ -558,4 +589,38 @@ rule MetaEuk_easy_predict:
         "tar -czf {output.tar} -C {params.tmp} $(ls {params.tmp}/) ; "
         "rm -r {params.tmp} ; "
 
+
+# A variable to be used in the next rule:
+metaeuk_out_base = setn+"/"+setn
+
+rule MetaEuk_taxonomic_classification:
+    input:
+        Metaeuk_results  = S3.remote("eukcontainer/contigs/"+megahit_version+"/"+EukRep_version+"_"+EukRep_mode+"/"+MetaEuk_version+"/"+MetaEuk_reference+"/"+setn+"_MetaEuk_preds.fasta.tar.gz"),
+        taxAnnotTargetDb = EUK_taxAnnot,
+    params:
+        contigsDB = setn+"/tempFolder/latest/contigs",
+        preds_fasta = setn+"/MetaEuk_preds.fasta",
+        preds_tsv   = setn+"/MetaEuk_preds.fasta.headersMap.tsv",
+        sample_list = setn+"/"+setn+"_samples.txt",
+        tempfolder_2 = setn+"/tempFolder_2",
+        tmp = "tmp_MetaEuk_taxannot_"+setn,
+        metaeuk_out_base = metaeuk_out_base,
+        tax_per_pred = metaeuk_out_base+"_tax_per_pred.tsv",
+        tax_per_contig = metaeuk_out_base+"_tax_per_contig.tsv",
+    output:
+        tar = S3.remote("eukcontainer/contigs/"+megahit_version+"/"+EukRep_version+"_"+EukRep_mode+"/"+MetaEuk_version+"/"+MetaEuk_reference+"/"+setn+"_MetaEuk_preds_taxAnnot.tar.gz"),
+    log: setn+"/log_MetaEuk_taxtocontig.txt"
+    shell:
+        # Unpack MetaEuk results:
+        "mkdir -p {setn} ; "
+        "tar -xf {input.Metaeuk_results} -C {setn} ; " 
+        # Run MetaEuk tax annotator:
+        "{{ time metaeuk taxtocontig {params.contigsDB} {params.preds_fasta} {params.preds_tsv} {input.taxAnnotTargetDb} "
+          " {params.metaeuk_out_base} {params.tempfolder_2} --majority 0.5 --tax-lineage --lca-mode 2 && echo 'MetaEuk taxtocontig finished good, without error.' ; }} > {log} 2>&1 && "
+        # Pack MetaEuk tax results:
+        "mkdir -p {params.tmp} && "
+        "echo 'copying' >> {log} && "
+        "cp {params.tax_per_pred} {params.tax_per_contig} {log} {params.sample_list} {params.tmp}/ && "
+        "tar -czf {output.tar} -C {params.tmp} $(ls {params.tmp}/) && "
+        "rm -r {params.tmp} ; "
 

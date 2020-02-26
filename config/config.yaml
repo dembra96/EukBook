@@ -10,6 +10,7 @@ EukRep_version: EukRep_v0.6.6
 EukRep_mode: lenient
 MetaEuk_version: MetaEuk_alpha
 MetaEuk_reference: metaeuk_ref_profiles_more_than1_MMETSP_zenodo_3247846_profiles
+MetaEuk_taxAnnot: MMETSP_zenodo_3247846_uniclust90_2018_08_seed_valid_taxids
 
 # Pipeline running settings:
 Quick_mode: False 
