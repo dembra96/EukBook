@@ -14,8 +14,8 @@ else
     SUFFIX="${SAMPLE: -1}"
     MC_PATH="${MC_PATH}/00${SUFFIX}/${SAMPLE}/${SAMPLE}"
 fi
-mc cp "${MC_PATH}_1.fastq.gz" "$2"
-mc cp "${MC_PATH}_2.fastq.gz" "$3"
+mc cp -q "${MC_PATH}_1.fastq.gz" "$2"
+mc cp -q "${MC_PATH}_2.fastq.gz" "$3"
 
 # The next lines of code are temporary and are only needed to subset the first 50K
 # reads of the sample at the pipeline testing stage. Each read takes 4 lines in fastq file.

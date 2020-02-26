@@ -553,7 +553,6 @@ rule Contig_concatenating:
     threads: 1
     shell:
         "mkdir -p {setn} ;"
-        "cat {input} > aggl_archive ; " 
         "cat {input} | tar -xzivf - -C "+setn+ " ; " +
         snakemake_folder + "/scripts/contig_rename_concat.sh {output} " + 
         ' '.join(expand("{setn}/{sample}/contigs.EukRep.fa", setn=setn, sample=config['SAMPLE']))

@@ -35,8 +35,8 @@ else
     SUFFIX="${SAMPLE: -1}"
     MC_PATH="${MC_PATH}/00${SUFFIX}/${SAMPLE}/${SAMPLE}"
 fi
-retry mc cp "${MC_PATH}_1.fastq.gz" "$2"
-retry mc cp "${MC_PATH}_2.fastq.gz" "$3"
+retry mc cp -q "${MC_PATH}_1.fastq.gz" "$2"
+retry mc cp -q "${MC_PATH}_2.fastq.gz" "$3"
 
 # The next lines of code are temporary and are only needed to subset the first 10K
 # reads of the sample at the development stage
