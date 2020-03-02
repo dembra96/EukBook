@@ -421,9 +421,9 @@ rule QUAST_raw_contigs:
     params:
         contigs=setn+"/{sample}/contigs.megahit.fa", # intermediate file
         tmp="tmp_quast_raw_{sample}",                # temporary folder
+	dir=setn+"/quasts/quast_raw_{sample}",       # results folder with log
     output:
-        directory(setn+"/quasts/quast_raw_{sample}"),   # {output[0]}
-        S3.remote("eukcontainer/contigs/"+megahit_version+"/QUAST_raw_contigs/{sample}.quast.raw.tar.gz"), # {output[1]}
+        S3.remote("eukcontainer/contigs/"+megahit_version+"/QUAST_raw_contigs/{sample}.quast.raw.tar.gz"), # {output[0]}
     conda: "yaml/quast.yaml"
     threads: 1
     shell:
@@ -432,13 +432,13 @@ rule QUAST_raw_contigs:
         "tar -xf {input} -C {setn} ; " # will give intermediate file
 
         # Run QUAST
-        "quast -t {threads} --silent -o {output[0]} {params.contigs} ; "
+        "quast -t {threads} --silent -o {params.dir} {params.contigs} ; "
 
         # Pack QUAST results
         # some manipulations to avoid having files under "set_x" folder in tar file:
         "mkdir -p {params.tmp}/quasts ; "
-        "cp -r {output[0]} {params.tmp}/quasts/ ; "
-        "tar -czf {output[1]} -C {params.tmp} $(ls {params.tmp}/) ; "
+        "cp -r {params.dir} {params.tmp}/quasts/ ; "
+        "tar -czf {output[0]} -C {params.tmp} $(ls {params.tmp}/) ; "
         "rm -r {params.tmp} ; "
 
 
@@ -447,19 +447,19 @@ rule QUAST_raw_contigs_sizefiltered:
         setn+"/{sample}/contigs.megahit.sizefiltered.fa",
     params:
         tmp="tmp_quast_sizefilt_{sample}",  # temporary folder
+        dir=setn+"/quasts/quast_filtsize_{sample}",  # results folder with log
     output:
-        directory(setn+"/quasts/quast_filtsize_{sample}"),
         S3.remote("eukcontainer/contigs/"+megahit_version+"/QUAST_raw_contigs/{sample}.quast.sizefilt.tar.gz"),
     conda: "yaml/quast.yaml"
     threads: 1
     shell:
         # Run QUAST
-        "quast -t {threads} --silent --min-contig "+str(mincontiglen)+" -o {output[0]} {input}; "
+        "quast -t {threads} --silent --min-contig "+str(mincontiglen)+" -o {params.dir} {input}; "
 
         # Pack QUAST results
         "mkdir -p {params.tmp}/quasts ; "
-        "cp -r {output[0]} {params.tmp}/quasts/ ; "
-        "tar -czf {output[1]} -C {params.tmp} $(ls {params.tmp}/) ; "
+        "cp -r {params.dir} {params.tmp}/quasts/ ; "
+        "tar -czf {output[0]} -C {params.tmp} $(ls {params.tmp}/) ; "
         "rm -r {params.tmp} ; "
 
 
@@ -470,8 +470,8 @@ rule QUAST_EukRep:
     params:
         contigs=setn+"/{sample}/contigs.EukRep.fa", # intermediate file
         tmp="tmp_quast_eukrep_{sample}",            # temporary folder
+        dir=setn+"/quasts/quast_EukRep_{sample}",   # results folder with log
     output:
-        directory(setn+"/quasts/quast_EukRep_{sample}"),
         S3.remote("eukcontainer/contigs/"+megahit_version+"/"+EukRep_version+"_"+EukRep_mode+"/QUAST_EukRep/{sample}.quast.EukRep.tar.gz"),
     conda: "yaml/quast.yaml"
     threads: 1
@@ -481,12 +481,12 @@ rule QUAST_EukRep:
         "tar -xf {input} -C {setn} ; " # will give intermediate file
 
         # Run QUAST
-        "quast -t {threads} --silent --min-contig "+str(mincontiglen)+" -o {output[0]} {params.contigs} ; "
+        "quast -t {threads} --silent --min-contig "+str(mincontiglen)+" -o {params.dir} {params.contigs} ; "
 
         # Pack QUAST results
         "mkdir -p {params.tmp}/quasts ; "
-        "cp -r {output[0]} {params.tmp}/quasts/ ; "
-        "tar -czf {output[1]} -C {params.tmp} $(ls {params.tmp}/) ; "
+        "cp -r {params.dir} {params.tmp}/quasts/ ; "
+        "tar -czf {output[0]} -C {params.tmp} $(ls {params.tmp}/) ; "
         "rm -r {params.tmp} ; "
 
 
