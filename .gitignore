@@ -3,3 +3,4 @@ SRA_search/SRA_Run_browser_webpages_R
 bibigrid/EukMetaAssmbly-openrc.sh
 MinIO_secret.sh
 **.swp
+.snakemake

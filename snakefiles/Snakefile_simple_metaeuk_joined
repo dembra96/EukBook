@@ -108,17 +108,17 @@ targetmail="dembra96@gmail.com"
 onstart:
     if (Quick_mode==False):
         print("Workflow started, sample set: ", setn)
-        shell("mail -s 'Snakemake "+setn+" - Workflow started' %s < {log}" % targetmail)
+        shell("mail -s 'Snakemake "+setn+" - Started' %s < {log}" % targetmail)
 
 onsuccess:
     if (Quick_mode==False):
         print("Workflow finished, no error")
-        shell("mail -s 'Snakemake "+setn+" - Workflow successfully finished' %s < {log}" % targetmail)
+        shell("mail -s 'Snakemake "+setn+" - Finished' %s < {log}" % targetmail)
 
 onerror:
     if (Quick_mode==False):
         print("An error occurred")
-        shell("mail -s 'Snakemake "+setn+" - an error occurred' %s < {log}" % targetmail)
+        shell("mail -s 'Snakemake "+setn+" - ERROR' %s < {log}" % targetmail)
 
 
 
@@ -176,7 +176,8 @@ rule All:
         MultiQC = S3.remote(
            "eukcontainer/contigs/"+megahit_version+"/"+EukRep_version+"_"+EukRep_mode+"/"+
                 MetaEuk_version+"/"+MetaEuk_reference+"/"+setn+"_MultiQC.tar.gz") 
-
+    shell:
+        "touch "+setn+"/SET_PROCESSING_COMPLETELY_FINISHED"
 
 
 
