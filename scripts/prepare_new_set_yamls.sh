@@ -71,7 +71,7 @@ do
 	echo "#This is automaticlly generated yaml from" $1 "on" `date '+%d/%m/%Y_%H:%M:%S'` > $newfile
 	echo >> $newfile
 	echo "SAMPLESET:" >> $newfile
-	echo "   - set"$n >> $newfile
+	echo "   - set_"$n >> $newfile
 	echo "SAMPLE:" >> $newfile
 	
 	while IFS= read -r line

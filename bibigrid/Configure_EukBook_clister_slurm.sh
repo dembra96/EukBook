@@ -2,7 +2,7 @@
 
 #SBATCH --job-name=Conf_EukBook
 #SBATCH --output="/home/ubuntu/EukBook_configure-%A_%a.log"
-#SBATCH --array=1-5
+#SBATCH --array=1-25
 
 # Before running this script upload the MinIO Eukcontainer secret to the master node.
 # scp MinIO_secret.sh de:~/
