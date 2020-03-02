@@ -418,6 +418,7 @@ rule EukRep:
 rule QUAST_raw_contigs:
     input:
         S3.remote("eukcontainer/contigs/"+megahit_version+"/megahit/{sample}.contigs.megahit.fa.tar.gz"),
+        setn+"/{sample}/contigs.megahit.sizefiltered.fa", # to avoid quast and sizefilt accessing same file simultaneously
     params:
         contigs=setn+"/{sample}/contigs.megahit.fa", # intermediate file
         tmp="tmp_quast_raw_{sample}",                # temporary folder
@@ -429,7 +430,7 @@ rule QUAST_raw_contigs:
     shell:
         #unpack megahit contigs tar
         "mkdir -p {setn} ; "
-        "tar -xf {input} -C {setn} ; " # will give intermediate file
+        "tar -xf {input[0]} -C {setn} ; " # will give intermediate file
 
         # Run QUAST
         "quast -t {threads} --silent -o {params.dir} {params.contigs} ; "
