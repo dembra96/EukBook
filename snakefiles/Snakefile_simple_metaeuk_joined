@@ -153,9 +153,7 @@ rule All:
            "eukcontainer/contigs/"+megahit_version+"/"+EukRep_version+"_"+EukRep_mode+"/"+
                 MetaEuk_version+"/"+MetaEuk_reference+"/"+setn+"_MetaEuk_preds_taxAnnot.tar.gz"),
 
-        sample_list = S3.remote(
-           "eukcontainer/contigs/"+megahit_version+"/"+EukRep_version+"_"+EukRep_mode+"/"+
-                MetaEuk_version+"/"+MetaEuk_reference+"/"+setn+"_samples.txt"),
+        sample_list = setn+"/"+setn+"_samples.txt",
 
         preprcoessing_reports = S3.remote(expand(
            "eukcontainer/contigs/"+megahit_version+"/preprocessing_reports/{sample}.reports.tar.gz",
@@ -176,8 +174,11 @@ rule All:
         MultiQC = S3.remote(
            "eukcontainer/contigs/"+megahit_version+"/"+EukRep_version+"_"+EukRep_mode+"/"+
                 MetaEuk_version+"/"+MetaEuk_reference+"/"+setn+"_MultiQC.tar.gz") 
+    output:
+        S3.remote("eukcontainer/contigs/"+megahit_version+"/"+EukRep_version+"_"+EukRep_mode+"/"+MetaEuk_version+"/"+MetaEuk_reference+"/"+setn+"_samples.txt"),
     shell:
-        "touch "+setn+"/SET_PROCESSING_COMPLETELY_FINISHED"
+        "cp {input.sample_list} {output[0]} ; "
+        "touch "+setn+"/SET_PROCESSING_COMPLETELY_FINISHED ; "
 
 
 
@@ -190,7 +191,7 @@ rule All:
 #rule to save sample accessions provided in yaml as simple text list to copy to remote container.
 rule Write_samples:
     output:
-        S3.remote("eukcontainer/contigs/"+megahit_version+"/"+EukRep_version+"_"+EukRep_mode+"/"+MetaEuk_version+"/"+MetaEuk_reference+"/"+setn+"_samples.txt"),
+        setn+"/"+setn+"_samples.txt",
     threads: 1
     run:
         with open(output[0], 'w') as f:
@@ -586,7 +587,7 @@ rule MetaEuk_easy_predict:
     input:
         contigs = setn+"/EukRep_contigs_renamed_cat.fasta",
         profiles = EUK_PROFILES,
-        sample_list = S3.remote("eukcontainer/contigs/"+megahit_version+"/"+EukRep_version+"_"+EukRep_mode+"/"+MetaEuk_version+"/"+MetaEuk_reference+"/"+setn+"_samples.txt"),
+        sample_list = setn+"/"+setn+"_samples.txt",
     params:
         tmp = "tmp_MetaEuk_"+setn,
         aux_files_folder = setn+"/tempFolder/latest",
