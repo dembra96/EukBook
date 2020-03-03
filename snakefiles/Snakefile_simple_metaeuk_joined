@@ -335,9 +335,10 @@ rule Megahit_unfiltered:
     input:
         setn+"/{sample}/reads_1_trim.fastq.gz",
         setn+"/{sample}/reads_2_trim.fastq.gz"
+    params:
+        dir = setn+"/{sample}/megahit_unfiltered",
     output:
-        directory(setn+"/{sample}/megahit_unfiltered"), #{output[0]}
-        setn+"/{sample}/contigs.megahit.fa", #{output[1]} #need to explicitly write in tar operation
+        contigs = setn+"/{sample}/contigs.megahit.fa",
     log:
         setn+"/{sample}/log_megahit.txt" #need to explicitly write in tar operation
     conda: "yaml/megahit.yaml"
@@ -345,8 +346,21 @@ rule Megahit_unfiltered:
                # This will allow two megahits run in parallell and make sure all cores are 100% busy all the time, 
                # because with single megahit run on all cores they are ~75% occupied on average.
     shell:
-        "{{ time megahit -t 14 -1 {input[0]} -2 {input[1]} -o {output[0]} --min-contig-len 500; }} 2> {log}; "
-        "cp {output[0]}/final.contigs.fa {output[1]}; " # copy results one folder up for proper QUAST labeling later
+        # If there is an unfinished megahit - finish it. Otherwise run full megahit.
+        "if [[ ! -d {params.dir} ]]; then " # normal megahit
+            "echo 'Running normal megahit for {wildcards.sample}' ; "
+            "{{ time megahit -t 14 -1 {input[0]} -2 {input[1]} -o {params.dir} --min-contig-len 500; }} 2> {log} ; "
+        "else "
+            "if [[ -d {params.dir} && ! -f {params.dir}/done ]]; then " # continue unfinished megahit.
+                "echo -e '\\n\\n[[ATTENTION]]: Continuing unfinished megahit for {wildcards.sample}\\n\\n' ; "
+                "{{ time megahit -t 14 -1 {input[0]} -2 {input[1]} -o {params.dir} --min-contig-len 500 --continue; }} 2> {log} ; "
+            "else " # delete old megahit and run a new one. It is a rerun. Otherwise this case wouldn't happen.
+                "echo -e '\\n\\n[[ATTENTION]]: RE-running megahit for {wildcards.sample}\\n\\n' ; "
+                "rm -r {params.dir} ; "
+                "{{ time megahit -t 14 -1 {input[0]} -2 {input[1]} -o {params.dir} --min-contig-len 500; }} 2> {log} ; "
+            "fi ; "
+        "fi ; "
+        "cp {params.dir}/final.contigs.fa {output.contigs} ; " # copy results one folder up for proper QUAST labeling later
 
 
 rule Megahit_upload:
