@@ -433,7 +433,14 @@ rule QUAST_raw_contigs:
         "tar -xf {input[0]} -C {setn} ; " # will give intermediate file
 
         # Run QUAST
-        "quast -t {threads} --silent -o {params.dir} {params.contigs} ; "
+        # Conditional execution based on if contig file is empty or not.
+        # If empty - run with avoiding error to not break the Snakemake, but still have the folder.
+        "if [[ -s {params.contigs} ]] ; "
+        "   then quast -t {threads} --silent --min-contig "+str(mincontiglen)+" -o {params.dir} {params.contigs} ; "
+        "else "
+        "   quast -t {threads} --silent --min-contig "+str(mincontiglen)+" -o {params.dir} {params.contigs} || "
+        "      echo -e '\\n\\n[[[ATTENTION]]]: contig file {params.contigs} for QUAST was empty\\n\\n' ; "
+        "fi ; "
 
         # Pack QUAST results
         # some manipulations to avoid having files under "set_x" folder in tar file:
@@ -455,7 +462,14 @@ rule QUAST_raw_contigs_sizefiltered:
     threads: 1
     shell:
         # Run QUAST
-        "quast -t {threads} --silent --min-contig "+str(mincontiglen)+" -o {params.dir} {input}; "
+        # Conditional execution based on if contig file is empty or not.
+        # If empty - run with avoiding error to not break the Snakemake, but still have the folder.
+        "if [[ -s {input[0]} ]] ; "
+        "   then   quast -t {threads} --silent --min-contig "+str(mincontiglen)+" -o {params.dir} {input[0]} ; "
+        "else "
+        "   quast -t {threads} --silent --min-contig "+str(mincontiglen)+" -o {params.dir} {input[0]} || "
+        "      echo -e '\\n\\n[[[ATTENTION]]]: contig file {input[0]} for QUAST was empty\\n\\n' ; "
+        "fi ; "
 
         # Pack QUAST results
         "mkdir -p {params.tmp}/quasts ; "
@@ -482,7 +496,14 @@ rule QUAST_EukRep:
         "tar -xf {input} -C {setn} ; " # will give intermediate file
 
         # Run QUAST
-        "quast -t {threads} --silent --min-contig "+str(mincontiglen)+" -o {params.dir} {params.contigs} ; "
+        # Conditional execution based on if contig file is empty or not.
+        # If empty - run with avoiding error to not break the Snakemake, but still have the folder.
+        "if [[ -s {params.contigs} ]] ; "
+        "   then   quast -t {threads} --silent --min-contig "+str(mincontiglen)+" -o {params.dir} {params.contigs} ; "
+        "else "
+        "   quast -t {threads} --silent --min-contig "+str(mincontiglen)+" -o {params.dir} {params.contigs} || "
+        "      echo -e '\\n\\n[[[ATTENTION]]]: contig file {params.contigs} for QUAST was empty\\n\\n' ; "
+        "fi ; "    
 
         # Pack QUAST results
         "mkdir -p {params.tmp}/quasts ; "
