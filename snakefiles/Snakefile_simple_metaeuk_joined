@@ -349,15 +349,15 @@ rule Megahit_unfiltered:
         # If there is an unfinished megahit - finish it. Otherwise run full megahit.
         "if [[ ! -d {params.dir} ]]; then " # normal megahit
             "echo 'Running normal megahit for {wildcards.sample}' ; "
-            "{{ time megahit -t 14 -1 {input[0]} -2 {input[1]} -o {params.dir} --min-contig-len 500; }} 2> {log} ; "
+            "{{ /usr/bin/time -v megahit -t 14 -1 {input[0]} -2 {input[1]} -o {params.dir} --min-contig-len 500 --memory 0.65; }} 2> {log} ; "
         "else "
             "if [[ -d {params.dir} && ! -f {params.dir}/done ]]; then " # continue unfinished megahit.
                 "echo -e '\\n\\n[[ATTENTION]]: Continuing unfinished megahit for {wildcards.sample}\\n\\n' ; "
-                "{{ time megahit -t 14 -1 {input[0]} -2 {input[1]} -o {params.dir} --min-contig-len 500 --continue; }} 2> {log} ; "
+                "{{ /usr/bin/time -v megahit -t 14 -1 {input[0]} -2 {input[1]} -o {params.dir} --min-contig-len 500 --memory 0.65 --continue; }} 2> {log} ; "
             "else " # delete old megahit and run a new one. It is a rerun. Otherwise this case wouldn't happen.
                 "echo -e '\\n\\n[[ATTENTION]]: RE-running megahit for {wildcards.sample}\\n\\n' ; "
                 "rm -r {params.dir} ; "
-                "{{ time megahit -t 14 -1 {input[0]} -2 {input[1]} -o {params.dir} --min-contig-len 500; }} 2> {log} ; "
+                "{{ /usr/bin/time -v megahit -t 14 -1 {input[0]} -2 {input[1]} -o {params.dir} --min-contig-len 500 --memory 0.65; }} 2> {log} ; "
             "fi ; "
         "fi ; "
         "cp {params.dir}/final.contigs.fa {output.contigs} ; " # copy results one folder up for proper QUAST labeling later
