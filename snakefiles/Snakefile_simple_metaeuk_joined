@@ -291,10 +291,10 @@ rule Fastp_trimming:
         setn+"/{sample}/reads_2_trim.fastq.gz",
         setn+"/{sample}/fastp.json",
         setn+"/{sample}/fastp.html" 
-    threads: 4
+    threads: 3
     conda: "yaml/conda_packages.yaml"
     shell: 
-        "fastp -r -w {threads} -i {input[0]} -I {input[1]} -o {output[0]} -O {output[1]} -j {output[2]} -h {output[3]} ; "
+        "fastp -r -w 4 -i {input[0]} -I {input[1]} -o {output[0]} -O {output[1]} -j {output[2]} -h {output[3]} ; "
 
 rule FastQC_trimmed:
     input:
