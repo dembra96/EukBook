@@ -1,10 +1,11 @@
 #!/bin/bash
 
-#SBATCH --job-name=EukBook
+#SBATCH --job-name=Euk_Fix
 #SBATCH --output="/home/ubuntu/EukBook_slurm-%A_%a.log"
-#SBATCH --array=70-84,86-100
-
+#SBATCH --array=11,67
+#SBATCH --nodelist=bibigrid-worker1-23-nxscftyhrss47ez
 echo "SLURM_ARRAY_TASK_ID is:  ${SLURM_ARRAY_TASK_ID}"
+echo "This is a continuation after errors of 100 sets. Current set had an error."
 source ~/.profile #to activate conda 
 
 workdir="/mnt/samples/simple"
