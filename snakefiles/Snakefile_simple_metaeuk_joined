@@ -263,8 +263,8 @@ rule GET_METAEUK_TAXANNOTDB_SMALL:
 
 rule Download_fastq:
     output: 
-        setn+"/{sample}/reads_1.fastq.gz",
-        setn+"/{sample}/reads_2.fastq.gz"
+        temp(setn+"/{sample}/reads_1.fastq.gz"),
+        temp(setn+"/{sample}/reads_2.fastq.gz"),
     threads: 1
     shell: 
         snakemake_folder + "/scripts/" + downloading_script + " {wildcards.sample} {output}" 
@@ -287,8 +287,8 @@ rule Fastp_trimming:
         setn+"/{sample}/reads_1.fastq.gz",
         setn+"/{sample}/reads_2.fastq.gz"
     output: 
-        setn+"/{sample}/reads_1_trim.fastq.gz",
-        setn+"/{sample}/reads_2_trim.fastq.gz",
+        temp(setn+"/{sample}/reads_1_trim.fastq.gz"),
+        temp(setn+"/{sample}/reads_2_trim.fastq.gz"),
         setn+"/{sample}/fastp.json",
         setn+"/{sample}/fastp.html" 
     threads: 3
@@ -367,13 +367,17 @@ rule Megahit_upload:
     input:
         setn+"/{sample}/contigs.megahit.fa", #{output[1]} #need to explicitly write in tar operation
         setn+"/{sample}/log_megahit.txt",
+    params:
+        megahit_intermaediate_contigs_dir = setn+"/{sample}/megahit_unfiltered/intermediate_contigs"
     output:
         S3.remote("eukcontainer/contigs/"+megahit_version+"/megahit/{sample}.contigs.megahit.fa.tar.gz"), #{output[2]}
     threads: 1
     shell:
         "touch {output} ; " # IMPORTANT! A stamp to reserve the temp local folder,
                             # so no finished tarring processes will delete it before all other tars also finish. 
-        "tar -cf {output} -I 'pigz' -C "+setn+" {wildcards.sample}/contigs.megahit.fa {wildcards.sample}/log_megahit.txt; "
+        "tar -cf {output} -I 'pigz' -C "+setn+" {wildcards.sample}/contigs.megahit.fa {wildcards.sample}/log_megahit.txt ; "
+        # Cleanup the huge intermediate contigs folder
+        "rm -r {params.megahit_intermaediate_contigs_dir} ; "
 
 
 
@@ -610,7 +614,7 @@ rule MetaEuk_easy_predict:
     log: setn+"/log_MetaEuk_easypredict.txt"
     output:
         fasta = setn+"/MetaEuk_preds.fasta",
-        tempfolder = directory(setn+"/tempFolder"),
+        tempfolder = temp(directory(setn+"/tempFolder")),
         tsv = setn+"/MetaEuk_preds.fasta.headersMap.tsv",
         tar = S3.remote("eukcontainer/contigs/"+megahit_version+"/"+EukRep_version+"_"+EukRep_mode+"/"+MetaEuk_version+"/"+MetaEuk_reference+"/"+setn+"_MetaEuk_preds.fasta.tar.gz"),
     shell:
@@ -639,12 +643,12 @@ rule MetaEuk_taxonomic_classification:
         preds_fasta = setn+"/MetaEuk_preds.fasta",
         preds_tsv   = setn+"/MetaEuk_preds.fasta.headersMap.tsv",
         sample_list = setn+"/"+setn+"_samples.txt",
-        tempfolder_2 = setn+"/tempFolder_2",
         tmp = "tmp_MetaEuk_taxannot_"+setn,
         metaeuk_out_base = metaeuk_out_base,
         tax_per_pred = metaeuk_out_base+"_tax_per_pred.tsv",
         tax_per_contig = metaeuk_out_base+"_tax_per_contig.tsv",
     output:
+        tempfolder_2 = temp(directory(setn+"/tempFolder_2")),
         tar = S3.remote("eukcontainer/contigs/"+megahit_version+"/"+EukRep_version+"_"+EukRep_mode+"/"+MetaEuk_version+"/"+MetaEuk_reference+"/"+setn+"_MetaEuk_preds_taxAnnot.tar.gz"),
     log: setn+"/log_MetaEuk_taxtocontig.txt"
     shell:
@@ -653,7 +657,7 @@ rule MetaEuk_taxonomic_classification:
         "tar -xf {input.Metaeuk_results} -C {setn} ; " 
         # Run MetaEuk tax annotator:
         "{{ time metaeuk taxtocontig {params.contigsDB} {params.preds_fasta} {params.preds_tsv} {input.taxAnnotTargetDb} "
-          " {params.metaeuk_out_base} {params.tempfolder_2} --majority 0.5 --tax-lineage --lca-mode 2 && echo 'MetaEuk taxtocontig finished good, without error.' ; }} > {log} 2>&1 && "
+          " {params.metaeuk_out_base} {output.tempfolder_2} --majority 0.5 --tax-lineage --lca-mode 2 && echo 'MetaEuk taxtocontig finished good, without error.' ; }} > {log} 2>&1 && "
         # Pack MetaEuk tax results:
         "mkdir -p {params.tmp} && "
         "echo 'copying' >> {log} && "
