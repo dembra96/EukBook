@@ -455,9 +455,9 @@ rule QUAST_raw_contigs:
         # Conditional execution based on if contig file is empty or not.
         # If empty - run with avoiding error to not break the Snakemake, but still have the folder.
         "if [[ -s {params.contigs} ]] ; "
-        "   then quast -t {threads} --silent --min-contig "+str(mincontiglen)+" -o {params.dir} {params.contigs} ; "
+        "   then quast -t {threads} --silent -o {params.dir} {params.contigs} ; "
         "else "
-        "   quast -t {threads} --silent --min-contig "+str(mincontiglen)+" -o {params.dir} {params.contigs} || "
+        "   quast -t {threads} --silent -o {params.dir} {params.contigs} || "
         "      echo -e '\\n\\n[[[ATTENTION]]]: contig file {params.contigs} for QUAST was empty\\n\\n' ; "
         "fi ; "
 
