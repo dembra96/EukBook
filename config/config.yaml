@@ -14,4 +14,5 @@ MetaEuk_taxAnnot: MMETSP_zenodo_3247846_uniclust90_2018_08_seed_valid_taxids
 
 # Pipeline running settings:
 Quick_mode: False 
+Megahit_parallel_mode: True
 targetmail: dembra96@gmail.com

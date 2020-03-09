@@ -32,7 +32,9 @@ MetaEuk_version   = config['MetaEuk_version']
 MetaEuk_reference = config['MetaEuk_reference']
 MetaEuk_taxAnnot  = config['MetaEuk_taxAnnot']
 MetaEuk_taxAnnot_small = "seqTaxOnlyCharoDB"
+
 Quick_mode        = config['Quick_mode']
+Megahit_parallel_mode = config['Megahit_parallel_mode']
 
 
 
@@ -72,6 +74,22 @@ else:
 
 
 
+###########################
+## Megahit parallel mode?##
+###########################
+
+### Run several (2) megahits in parallel to occupy 100% CPU resources?
+# Avoid when running big samples because RAM will be the limit and cause errors.
+if (Megahit_parallel_mode==True):
+    megahit_cores_coef=1/2
+    megahit_memory_limit=0.65
+else:
+    megahit_cores_coef=1
+    megahit_memory_limit=0.9
+
+maxthreads = snakemake.utils.available_cpu_count()
+
+print("Megahit_parallel_mode =", Megahit_parallel_mode)
 ###########################
 ##    Remote container   ##
 ###########################
@@ -342,22 +360,23 @@ rule Megahit_unfiltered:
     log:
         setn+"/{sample}/log_megahit.txt" #need to explicitly write in tar operation
     conda: "yaml/megahit.yaml"
-    threads: 7 # But for Megahit I actually specify -t 14 .
-               # This will allow two megahits run in parallell and make sure all cores are 100% busy all the time, 
-               # because with single megahit run on all cores they are ~75% occupied on average.
+    threads: int( maxthreads * megahit_cores_coef ) # Dependent on Megahit_parallel_mode option
+    # This will allow two megahits run in parallell and make sure all cores are 100% busy all the time, 
+    # because with single megahit run on all cores they are ~75% occupied on average.
+    # However, if big files are processed, non-parallel mode is required to not run out of RAM.
     shell:
         # If there is an unfinished megahit - finish it. Otherwise run full megahit.
         "if [[ ! -d {params.dir} ]]; then " # normal megahit
             "echo 'Running normal megahit for {wildcards.sample}' ; "
-            "{{ /usr/bin/time -v megahit -t 14 -1 {input[0]} -2 {input[1]} -o {params.dir} --min-contig-len 500 --memory 0.65; }} 2> {log} ; "
+            "{{ /usr/bin/time -v megahit -t "+str(maxthreads)+" -1 {input[0]} -2 {input[1]} -o {params.dir} --min-contig-len 500 --memory "+str(megahit_memory_limit)+"; }} 2> {log} ; "
         "else "
             "if [[ -d {params.dir} && ! -f {params.dir}/done ]]; then " # continue unfinished megahit.
                 "echo -e '\\n\\n[[ATTENTION]]: Continuing unfinished megahit for {wildcards.sample}\\n\\n' ; "
-                "{{ /usr/bin/time -v megahit -t 14 -1 {input[0]} -2 {input[1]} -o {params.dir} --min-contig-len 500 --memory 0.65 --continue; }} 2> {log} ; "
+                "{{ /usr/bin/time -v megahit -t "+str(maxthreads)+" -1 {input[0]} -2 {input[1]} -o {params.dir} --min-contig-len 500 --memory "+str(megahit_memory_limit)+" --continue; }} 2> {log} ; "
             "else " # delete old megahit and run a new one. It is a rerun. Otherwise this case wouldn't happen.
                 "echo -e '\\n\\n[[ATTENTION]]: RE-running megahit for {wildcards.sample}\\n\\n' ; "
                 "rm -r {params.dir} ; "
-                "{{ /usr/bin/time -v megahit -t 14 -1 {input[0]} -2 {input[1]} -o {params.dir} --min-contig-len 500 --memory 0.65; }} 2> {log} ; "
+                "{{ /usr/bin/time -v megahit -t "+str(maxthreads)+" -1 {input[0]} -2 {input[1]} -o {params.dir} --min-contig-len 500 --memory "+str(megahit_memory_limit)+"; }} 2> {log} ; "
             "fi ; "
         "fi ; "
         "cp {params.dir}/final.contigs.fa {output.contigs} ; " # copy results one folder up for proper QUAST labeling later
