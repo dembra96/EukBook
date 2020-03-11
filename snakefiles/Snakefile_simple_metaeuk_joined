@@ -372,17 +372,24 @@ rule Megahit_unfiltered:
     # However, if big files are processed, non-parallel mode is required to not run out of RAM.
     shell:
         # If there is an unfinished megahit - finish it. Otherwise run full megahit.
+        # If during the run megahit runs into an error - rerun with --mem-flag 0 memory-saving mode 
+        # (because big files crash due to not enough RAM)
         "if [[ ! -d {params.dir} ]]; then " # normal megahit
-            "echo 'Running normal megahit for {wildcards.sample}' ; "
-            "{{ /usr/bin/time -v megahit -t "+str(maxthreads)+" -1 {input[0]} -2 {input[1]} -o {params.dir} --min-contig-len 500 --memory "+str(megahit_memory_limit)+"; }} 2> {log} ; "
+            "( echo 'Running normal megahit for {wildcards.sample}' && "
+               "{{ /usr/bin/time -v megahit -t {maxthreads} -1 {input[0]} -2 {input[1]} -o {params.dir} --min-contig-len 500 ; }} 2> {log} ) || "
+            "( echo 'Running memory-saving megahit for {wildcards.sample}' && "
+               "rm -f -r {params.dir} && "
+               "{{ /usr/bin/time -v megahit -t {maxthreads} -1 {input[0]} -2 {input[1]} -o {params.dir} --min-contig-len 500 --mem-flag 0 ; }} 2>> {log} ) ; "
         "else "
             "if [[ -d {params.dir} && ! -f {params.dir}/done ]]; then " # continue unfinished megahit.
                 "echo -e '\\n\\n[[ATTENTION]]: Continuing unfinished megahit for {wildcards.sample}\\n\\n' ; "
-                "{{ /usr/bin/time -v megahit -t "+str(maxthreads)+" -1 {input[0]} -2 {input[1]} -o {params.dir} --min-contig-len 500 --memory "+str(megahit_memory_limit)+" --continue; }} 2> {log} ; "
+                "{{ /usr/bin/time -v megahit -t {maxthreads} -1 {input[0]} -2 {input[1]} -o {params.dir} --min-contig-len 500 --continue ; }} 2> {log} ; "
             "else " # delete old megahit and run a new one. It is a rerun. Otherwise this case wouldn't happen.
                 "echo -e '\\n\\n[[ATTENTION]]: RE-running megahit for {wildcards.sample}\\n\\n' ; "
                 "rm -r {params.dir} ; "
-                "{{ /usr/bin/time -v megahit -t "+str(maxthreads)+" -1 {input[0]} -2 {input[1]} -o {params.dir} --min-contig-len 500 --memory "+str(megahit_memory_limit)+"; }} 2> {log} ; "
+                "{{ /usr/bin/time -v megahit -t {maxthreads} -1 {input[0]} -2 {input[1]} -o {params.dir} --min-contig-len 500 ; }} 2> {log} || "
+                "( rm -f -r {params.dir} && "
+                "{{ /usr/bin/time -v megahit -t {maxthreads} -1 {input[0]} -2 {input[1]} -o {params.dir} --min-contig-len 500 --mem-flag 0 ; }} 2>> {log} ) ; "
             "fi ; "
         "fi ; "
         "cp {params.dir}/final.contigs.fa {output.contigs} ; " # copy results one folder up for proper QUAST labeling later
