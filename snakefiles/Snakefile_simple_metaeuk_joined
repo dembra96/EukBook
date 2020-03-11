@@ -127,17 +127,23 @@ onstart:
     if (Quick_mode==False):
         print("Workflow started, sample set: ", setn)
         shell("mail -s 'Snakemake "+setn+" - Started' %s < {log}" % targetmail)
+        shell("ssh ${{SLURM_SUBMIT_HOST}} 'mkdir -p ~/snakemake_stamps'")
+        shell("mkdir -p ~/snakemake_stamps; touch ~/snakemake_stamps/%s_started_on_$(hostname)" % setn)
+        shell("scp ~/snakemake_stamps/%s_started_on_$(hostname) ${{SLURM_SUBMIT_HOST}}:~/snakemake_stamps/" % setn)
 
 onsuccess:
     if (Quick_mode==False):
         print("Workflow finished, no error")
         shell("mail -s 'Snakemake "+setn+" - Finished' %s < {log}" % targetmail)
+        shell("touch ~/snakemake_stamps/%s_finished_on_$(hostname)" % setn)
+        shell("scp ~/snakemake_stamps/%s_finished_on_$(hostname) ${{SLURM_SUBMIT_HOST}}:~/snakemake_stamps/" % setn)
 
 onerror:
     if (Quick_mode==False):
         print("An error occurred")
         shell("mail -s 'Snakemake "+setn+" - ERROR' %s < {log}" % targetmail)
-
+        shell("touch ~/snakemake_stamps/%s_ERROR_on_$(hostname)" % setn)
+        shell("scp ~/snakemake_stamps/%s_ERROR_on_$(hostname) ${{SLURM_SUBMIT_HOST}}:~/snakemake_stamps/" % setn)
 
 
 
