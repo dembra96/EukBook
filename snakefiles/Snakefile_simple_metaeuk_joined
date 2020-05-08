@@ -645,13 +645,13 @@ rule MetaEuk_easy_predict:
         aux_files_pattern = "{contigs*,MetaEuk_preds.*}",
     log: setn+"/log_MetaEuk_easypredict.txt"
     output:
-        fasta = setn+"/MetaEuk_preds.fasta",
+        fasta = setn+"/"+setn+"_MetaEuk_preds.fasta",
         tempfolder = temp(directory(setn+"/tempFolder")),
-        tsv = setn+"/MetaEuk_preds.fasta.headersMap.tsv",
+        tsv = setn+"/"+setn+"_MetaEuk_preds.fasta.headersMap.tsv",
         tar = S3.remote("eukcontainer/contigs/"+megahit_version+"/"+EukRep_version+"_"+EukRep_mode+"/"+MetaEuk_version+"/"+MetaEuk_reference+"/"+setn+"_MetaEuk_preds.fasta.tar.gz"),
     shell:
         #MetaEuk run
-        "{{ time metaeuk easy-predict {input.contigs} {input.profiles} {output.fasta} {output.tempfolder}"
+        "{{ /usr/bin/time -v metaeuk easy-predict {input.contigs} {input.profiles} {output.fasta} {output.tempfolder} --protein 1 "
         " --metaeuk-eval 0.0001 -e 100 --slice-search --min-ungapped-score 35"
         " --min-length 40 --min-exon-aa 20 --metaeuk-tcov 0.6; }} > {log} 2>&1 ; "
 
@@ -672,8 +672,8 @@ rule MetaEuk_taxonomic_classification:
         taxAnnotTargetDb = EUK_taxAnnot,
     params:
         contigsDB = setn+"/tempFolder/latest/contigs",
-        preds_fasta = setn+"/MetaEuk_preds.fasta",
-        preds_tsv   = setn+"/MetaEuk_preds.fasta.headersMap.tsv",
+        preds_fasta = setn+"/"+setn+"_MetaEuk_preds.fasta",
+        preds_tsv   = setn+"/"+setn+"_MetaEuk_preds.fasta.headersMap.tsv",
         sample_list = setn+"/"+setn+"_samples.txt",
         tmp = "tmp_MetaEuk_taxannot_"+setn,
         metaeuk_out_base = metaeuk_out_base,
@@ -688,7 +688,7 @@ rule MetaEuk_taxonomic_classification:
         "mkdir -p {setn} ; "
         "tar -xf {input.Metaeuk_results} -C {setn} ; " 
         # Run MetaEuk tax annotator:
-        "{{ time metaeuk taxtocontig {params.contigsDB} {params.preds_fasta} {params.preds_tsv} {input.taxAnnotTargetDb} "
+        "{{ /usr/bin/time -v metaeuk taxtocontig {params.contigsDB} {params.preds_fasta} {params.preds_tsv} {input.taxAnnotTargetDb} "
           " {params.metaeuk_out_base} {output.tempfolder_2} --majority 0.5 --tax-lineage --lca-mode 2 && echo 'MetaEuk taxtocontig finished good, without error.' ; }} > {log} 2>&1 && "
         # Pack MetaEuk tax results:
         "mkdir -p {params.tmp} && "

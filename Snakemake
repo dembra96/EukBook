@@ -26,7 +26,7 @@ LOGFILE=${LOGDIR}/snakemake_${START}_log.txt
 
 echo "Pipeline started on" ${START} > ${LOGFILE}
 
-( time snakemake -p -j --use-conda --conda-prefix ${HOME}/conda_snakemake_EukBook ${@} ) |& tee -a ${LOGFILE}
+( /usr/bin/time -v snakemake -p -j --use-conda --conda-prefix ${HOME}/conda_snakemake_EukBook ${@} ) |& tee -a ${LOGFILE}
 
 END=$(date +"%y-%m-%d_%H-%M-%S")
 
