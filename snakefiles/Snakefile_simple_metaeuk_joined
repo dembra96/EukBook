@@ -633,6 +633,9 @@ rule Contig_concatenating:
 
 
 # MetaEuk 
+
+metaeuk_base = setn+"/"+setn+"_MetaEuk_preds"
+
 rule MetaEuk_easy_predict:
     input:
         contigs = setn+"/EukRep_contigs_renamed_cat.fasta",
@@ -643,22 +646,24 @@ rule MetaEuk_easy_predict:
         aux_files_folder = setn+"/tempFolder/latest",
         aux_files_subfolder = "tempFolder/latest",
         aux_files_pattern = "{contigs*,MetaEuk_preds.*}",
+        base = metaeuk_base,
     log: setn+"/log_MetaEuk_easypredict.txt"
     output:
-        fasta = setn+"/"+setn+"_MetaEuk_preds.fasta",
+        fasta = setn+"/"+setn+"_MetaEuk_preds.fas",
+        codon =  setn+"/"+setn+"_MetaEuk_preds.codon.fas",
         tempfolder = temp(directory(setn+"/tempFolder")),
-        tsv = setn+"/"+setn+"_MetaEuk_preds.fasta.headersMap.tsv",
+        tsv = setn+"/"+setn+"_MetaEuk_preds.headersMap.tsv",
         tar = S3.remote("eukcontainer/contigs/"+megahit_version+"/"+EukRep_version+"_"+EukRep_mode+"/"+MetaEuk_version+"/"+MetaEuk_reference+"/"+setn+"_MetaEuk_preds.fasta.tar.gz"),
     shell:
         #MetaEuk run
-        "{{ /usr/bin/time -v metaeuk easy-predict {input.contigs} {input.profiles} {output.fasta} {output.tempfolder} --protein 1 "
+        "{{ /usr/bin/time -v metaeuk easy-predict {input.contigs} {input.profiles} {params.base} {output.tempfolder}"
         " --metaeuk-eval 0.0001 -e 100 --slice-search --min-ungapped-score 35"
         " --min-length 40 --min-exon-aa 20 --metaeuk-tcov 0.6; }} > {log} 2>&1 ; "
 
         # Pack MetaEuk results
         "mkdir -p {params.tmp}/{params.aux_files_subfolder} ; "
         "cp {params.aux_files_folder}/{params.aux_files_pattern} {params.tmp}/{params.aux_files_subfolder}/ ; "
-        "cp {output.fasta} {output.tsv} {log} {input.sample_list}   {params.tmp}/ ; "
+        "cp {params.base}* {log} {input.sample_list}   {params.tmp}/ ; "
         "tar -czf {output.tar} -C {params.tmp} $(ls {params.tmp}/) ; "
         "rm -r {params.tmp} ; "
 
@@ -672,8 +677,8 @@ rule MetaEuk_taxonomic_classification:
         taxAnnotTargetDb = EUK_taxAnnot,
     params:
         contigsDB = setn+"/tempFolder/latest/contigs",
-        preds_fasta = setn+"/"+setn+"_MetaEuk_preds.fasta",
-        preds_tsv   = setn+"/"+setn+"_MetaEuk_preds.fasta.headersMap.tsv",
+        preds_fasta = setn+"/"+setn+"_MetaEuk_preds.fas",
+        preds_tsv   = setn+"/"+setn+"_MetaEuk_preds.headersMap.tsv",
         sample_list = setn+"/"+setn+"_samples.txt",
         tmp = "tmp_MetaEuk_taxannot_"+setn,
         metaeuk_out_base = metaeuk_out_base,

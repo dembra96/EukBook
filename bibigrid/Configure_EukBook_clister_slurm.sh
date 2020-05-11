@@ -69,7 +69,7 @@ conda clean -a -y
 echo -e "\n\n[[ INSTALL METAEUK ]]\n"
 
 if [[ ! -f "successfully_installed_metaeuk" ]]; then
-	while true; do wget --timeout=10 -c https://mmseqs.com/archive/48a4b0f58fd82bd1e690c96d18c31c8d63e141dd/metaeuk-linux-avx2.tar.gz && break; done
+	while true; do wget --timeout=10 -c https://mmseqs.com/archive/d49cd731e4241abfae11004b0d6da5cf3c515297/metaeuk-linux-avx2.tar.gz && break; done
 	tar xzvf metaeuk-linux-avx2.tar.gz
 	PATH=$PATH:${HOME}/metaeuk/bin/
 	metaeuk
